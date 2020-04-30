@@ -241,7 +241,12 @@ if [[ ! -e /etc/wireguard/wg0.conf ]]; then
 		apt-get install -y wireguard qrencode
 	elif [[ "$os" == "ubuntu" && "$os_version" -eq 1804 ]]; then
 		# Ubuntu 18.04
-		# Repo is added manually so we don't depend on add-apt-repository
+		# Repo is added manually so we don't depend on add-apt-repository.
+		# gnupg is required to add the repo, we install it if not already present.
+		if ! dpkg -s gnupg &>/dev/null; then
+			apt-get update
+			apt-get install -y gnupg
+		fi
 		apt-key add - << EOF
 -----BEGIN PGP PUBLIC KEY BLOCK-----
 
