@@ -225,12 +225,18 @@ if [[ ! -e /etc/wireguard/wg0.conf ]]; then
 	new_client_dns
 	echo
 	echo "We are ready to set up your WireGuard server now."
-	# DigitalOcean ships their CentOS and Fedora images without firewalld
-	# We don't want to silently enable a firewall, so we give a subtle warning
-	# If the user continues, firewalld will be installed and enabled during setup
-	if [[ "$os" == "centos" || "$os" == "fedora" ]] && ! systemctl is-active --quiet firewalld.service; then
-		echo
-		echo "firewalld, which is required to manage routing tables, will also be installed."
+	# Install a firewall in the rare case where one is not already available
+	if ! systemctl is-active --quiet firewalld.service && ! hash iptables 2>/dev/null; then
+		if [[ "$os" == "centos" || "$os" == "fedora" ]]; then
+			firewall="firewalld"
+			# We don't want to silently enable firewalld, so we give a subtle warning
+			# If the user continues, firewalld will be installed and enabled during setup
+			echo
+			echo "firewalld, which is required to manage routing tables, will also be installed."
+		elif [[ "$os" == "debian" || "$os" == "ubuntu" ]]; then
+			# iptables is way less invasive than firewalld so no warning is given
+			firewall="iptables"
+		fi
 	fi
 	echo
 	read -n1 -r -p "Press any key to continue..."
@@ -238,7 +244,7 @@ if [[ ! -e /etc/wireguard/wg0.conf ]]; then
 	if [[ "$os" == "ubuntu" && "$os_version" -ge 2004 ]]; then
 		# Ubuntu 20.04 or higer
 		apt-get update
-		apt-get install -y wireguard qrencode
+		apt-get install -y wireguard qrencode $firewall
 	elif [[ "$os" == "ubuntu" && "$os_version" -eq 1804 ]]; then
 		# Ubuntu 18.04
 		# Repo is added manually so we don't depend on add-apt-repository.
@@ -286,7 +292,7 @@ EOF
 		# the system has an outdated kernel, there is no guarantee that old headers were
 		# still downloadable and to provide suitable headers for future kernel updates.
 		apt-get install -y linux-headers-generic
-		apt-get install -y wireguard iptables qrencode
+		apt-get install -y wireguard qrencode $firewall
 	elif [[ "$os" == "debian" && "$os_version" -eq 10 ]]; then
 		# Debian 10
 		if ! grep -qs '^deb .* buster-backports main' /etc/apt/sources.list /etc/apt/sources.list.d/*.list; then
@@ -304,24 +310,25 @@ EOF
 		# headers were still downloadable and to provide suitable headers for future
 		# kernel updates.
 		apt-get install -y linux-headers-"$architecture"
-		apt-get install -y wireguard iptables qrencode
+		apt-get install -y wireguard qrencode $firewall
 	elif [[ "$os" == "centos" && "$os_version" -eq 8 ]]; then
 		# CentOS 8
 		dnf install -y epel-release elrepo-release
-		dnf install -y kmod-wireguard wireguard-tools firewalld qrencode
+		dnf install -y kmod-wireguard wireguard-tools qrencode $firewall
 		mkdir -p /etc/wireguard/
-		systemctl enable --now firewalld.service
 	elif [[ "$os" == "centos" && "$os_version" -eq 7 ]]; then
 		# CentOS 7
 		yum install -y epel-release https://www.elrepo.org/elrepo-release-7.el7.elrepo.noarch.rpm
 		yum install -y yum-plugin-elrepo
-		yum install -y kmod-wireguard wireguard-tools firewalld qrencode
+		yum install -y kmod-wireguard wireguard-tools qrencode $firewall
 		mkdir -p /etc/wireguard/
-		systemctl enable --now firewalld.service
 	elif [[ "$os" == "fedora" ]]; then
 		# Fedora
-		dnf install -y wireguard-tools firewalld qrencode
+		dnf install -y wireguard-tools qrencode $firewall
 		mkdir -p /etc/wireguard/
+	fi
+	# If firewalld was just installed, enable it
+	if [[ "$firewall" == "firewalld" ]]; then
 		systemctl enable --now firewalld.service
 	fi
 	# Generate wg0.conf
