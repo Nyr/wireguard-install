@@ -310,7 +310,7 @@ EOF
 		# headers were still downloadable and to provide suitable headers for future
 		# kernel updates.
 		apt-get install -y linux-headers-"$architecture"
-		apt-get install -y wireguard qrencode $firewall
+		apt-get install -y wireguard qrencode bc $firewall
 	elif [[ "$os" == "centos" && "$os_version" -eq 8 ]]; then
 		# CentOS 8
 		dnf install -y epel-release elrepo-release
