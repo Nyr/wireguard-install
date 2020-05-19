@@ -5,6 +5,9 @@
 # Copyright (c) 2020 Nyr. Released under the MIT License.
 
 
+# Discard stdin. Needed when running from an one-liner which included a newline
+read -N 999999999 -t 0.001
+
 # Detect Debian users running the script with "sh" instead of bash
 if readlink /proc/$$/exe | grep -q "dash"; then
 	echo "This script needs to be run with bash, not sh"
