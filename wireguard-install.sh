@@ -5,23 +5,23 @@
 # Copyright (c) 2020 Nyr. Released under the MIT License.
 
 
-# Discard stdin. Needed when running from an one-liner which included a newline
+# Discard stdin. Needed when running from an one-liner which includes a newline
 read -N 999999999 -t 0.001
 
 # Detect Debian users running the script with "sh" instead of bash
 if readlink /proc/$$/exe | grep -q "dash"; then
-	echo "This script needs to be run with bash, not sh"
+	echo 'This installer needs to be run with "bash", not "sh".'
 	exit
 fi
 
 if [[ "$EUID" -ne 0 ]]; then
-	echo "Sorry, you need to run this as root"
+	echo "This installer needs to be run with superuser privileges."
 	exit
 fi
 
 # Detect OpenVZ 6
 if [[ $(uname -r | cut -d "." -f 1) -eq 2 ]]; then
-	echo "The system is running an old kernel, which is incompatible with this installer"
+	echo "The system is running an old kernel, which is incompatible with this installer."
 	exit
 fi
 
@@ -44,32 +44,32 @@ elif [[ -e /etc/fedora-release ]]; then
 	os_version=$(grep -oE '[0-9]+' /etc/fedora-release | head -1)
 	group_name="nobody"
 else
-	echo "Looks like you aren't running this installer on Ubuntu, Debian, CentOS or Fedora"
+	echo "This installer seems to be running on an unsupported distribution.
+Supported distributions are Ubuntu, Debian, CentOS, and Fedora."
 	exit
 fi
 
 if [[ "$os" == "ubuntu" && "$os_version" -lt 1804 ]]; then
-	echo "Ubuntu 18.04 or higher is required to use this installer
-This version of Ubuntu is too old and unsupported"
+	echo "Ubuntu 18.04 or higher is required to use this installer.
+This version of Ubuntu is too old and unsupported."
 	exit
 fi
 
 if [[ "$os" == "debian" && "$os_version" -lt 10 ]]; then
-	echo "Debian 10 or higher is required to use this installer
-This version of Debian is too old and unsupported"
+	echo "Debian 10 or higher is required to use this installer.
+This version of Debian is too old and unsupported."
 	exit
 fi
 
 if [[ "$os" == "centos" && "$os_version" -lt 7 ]]; then
-	echo "CentOS 7 or higher is required to use this installer
-This version of CentOS is too old and unsupported"
+	echo "CentOS 7 or higher is required to use this installer.
+This version of CentOS is too old and unsupported."
 	exit
 fi
 
 # Detect environments where $PATH does not include the sbin directories
 if ! grep -q sbin <<< $PATH; then
-	echo '$PATH does not include sbin
-Try using "su -" instead of "su"'
+	echo '$PATH does not include sbin. Try using "su -" instead of "su".'
 	exit
 fi
 
@@ -77,37 +77,37 @@ systemd-detect-virt -cq
 is_container="$?"
 
 if [[ "$os" == "fedora" && "$os_version" -eq 31 && $(uname -r | cut -d "." -f 2) -lt 6 && ! "$is_container" -eq 0 ]]; then
-	echo 'Fedora 31 is supported, but your kernel is outdated
-Upgrade the kernel using "dnf upgrade kernel" and restart'
+	echo 'Fedora 31 is supported, but the kernel is outdated.
+Upgrade the kernel using "dnf upgrade kernel" and restart.'
 	exit
 fi
 
 if [[ "$is_container" -eq 0 ]]; then
 	if [ "$(uname -m)" != "x86_64" ]; then
-		echo "In containerized systems, this installer supports only the x86_64 architecture
-This system runs on $(uname -m) and is unsupported"
+		echo "In containerized systems, this installer supports only the x86_64 architecture.
+The system runs on $(uname -m) and is unsupported."
 		exit
 	fi
 	# TUN device is required to use BoringTun if running inside a container
 	if [[ ! -e /dev/net/tun ]] || ! ( exec 7<>/dev/net/tun ) 2>/dev/null; then
-		echo "This system does not have the TUN device available
-TUN needs to be enabled before running this installer"
+		echo "The system does not have the TUN device available.
+TUN needs to be enabled before running this installer."
 		exit
 	fi
 fi
 
 new_client_dns () {
-	echo "Which DNS do you want to use for this client?"
+	echo "Select a DNS server for the client:"
 	echo "   1) Current system resolvers"
 	echo "   2) 1.1.1.1"
 	echo "   3) Google"
 	echo "   4) OpenDNS"
 	echo "   5) NTT"
 	echo "   6) AdGuard"
-	read -p "DNS [1]: " dns
+	read -p "DNS server [1]: " dns
 	until [[ -z "$dns" || "$dns" =~ ^[1-6]$ ]]; do
 		echo "$dns: invalid selection."
-		read -p "DNS [1]: " dns
+		read -p "DNS server [1]: " dns
 	done
 		# DNS
 	case "$dns" in
@@ -182,16 +182,13 @@ EOF
 if [[ ! -e /etc/wireguard/wg0.conf ]]; then
 	clear
 	echo 'Welcome to this WireGuard road warrior installer!'
-	echo
-	echo "I need to ask you a few questions before starting setup."
-	echo "You can use the default options and just press enter if you are ok with them."
 	# If system has a single IPv4, it is selected automatically. Else, ask the user
 	if [[ $(ip -4 addr | grep inet | grep -vEc '127\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}') -eq 1 ]]; then
 		ip=$(ip -4 addr | grep inet | grep -vE '127\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}' | cut -d '/' -f 1 | grep -oE '[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}')
 	else
 		number_of_ip=$(ip -4 addr | grep inet | grep -vEc '127\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}')
 		echo
-		echo "What IPv4 address should the WireGuard server use?"
+		echo "Which IPv4 address should be used?"
 		ip -4 addr | grep inet | grep -vE '127\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}' | cut -d '/' -f 1 | grep -oE '[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}' | nl -s ') '
 		read -p "IPv4 address [1]: " ip_number
 		until [[ -z "$ip_number" || "$ip_number" =~ ^[0-9]+$ && "$ip_number" -le "$number_of_ip" ]]; do
@@ -223,7 +220,7 @@ if [[ ! -e /etc/wireguard/wg0.conf ]]; then
 	if [[ $(ip -6 addr | grep -c 'inet6 [23]') -gt 1 ]]; then
 		number_of_ip6=$(ip -6 addr | grep -c 'inet6 [23]')
 		echo
-		echo "What IPv6 address should the WireGuard server use?"
+		echo "Which IPv6 address should be used?"
 		ip -6 addr | grep 'inet6 [23]' | cut -d '/' -f 1 | grep -oE '([0-9a-fA-F]{0,4}:){1,7}[0-9a-fA-F]{0,4}' | nl -s ') '
 		read -p "IPv6 address [1]: " ip6_number
 		until [[ -z "$ip6_number" || "$ip6_number" =~ ^[0-9]+$ && "$ip6_number" -le "$number_of_ip6" ]]; do
@@ -234,7 +231,7 @@ if [[ ! -e /etc/wireguard/wg0.conf ]]; then
 		ip6=$(ip -6 addr | grep 'inet6 [23]' | cut -d '/' -f 1 | grep -oE '([0-9a-fA-F]{0,4}:){1,7}[0-9a-fA-F]{0,4}' | sed -n "$ip6_number"p)
 	fi
 	echo
-	echo "What port do you want WireGuard listening to?"
+	echo "What port should WireGuard listen to?"
 	read -p "Port [51820]: " port
 	until [[ -z "$port" || "$port" =~ ^[0-9]+$ && "$port" -le 65535 ]]; do
 		echo "$port: invalid port."
@@ -244,11 +241,11 @@ if [[ ! -e /etc/wireguard/wg0.conf ]]; then
 	# Set up automatic updates for BoringTun if the user is fine with that
 	if [[ "$is_container" -eq 0 ]]; then
     	echo
-    	echo "BoringTun will be installed to set up WireGuard on your system."
-    	read -p "Do you want to enable automatic updates for it? [Y/n]: " boringtun_updates
+    	echo "BoringTun will be installed to set up WireGuard in the system."
+    	read -p "Should automatic updates be enabled for it? [Y/n]: " boringtun_updates
     	until [[ "$boringtun_updates" =~ ^[yYnN]*$ ]]; do
 	    	echo "$remove: invalid selection."
-			read -p "Do you want to enable automatic updates for it? [Y/n]: " boringtun_updates
+			read -p "Should automatic updates be enabled for it? [Y/n]: " boringtun_updates
 		done
 		if [[ "$boringtun_updates" =~ ^[yY]*$ ]]; then
 			if [[ "$os" == "centos" || "$os" == "fedora" ]]; then
@@ -259,29 +256,27 @@ if [[ ! -e /etc/wireguard/wg0.conf ]]; then
 		fi
 	fi
 	echo
-	echo "Tell me a name for the first client."
-	read -p "Client name [client]: " unsanitized_client
+	echo "Enter a name for the first client:"
+	read -p "Name [client]: " unsanitized_client
 	# Allow a limited set of characters to avoid conflicts
 	client=$(sed 's/[^0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_-]/_/g' <<< "$unsanitized_client")
 	[[ -z "$client" ]] && client="client"
 	echo
 	new_client_dns
 	echo
-	echo "We are ready to set up your WireGuard server now."
+	echo "WireGuard installation is ready to begin now."
 	# Install a firewall in the rare case where one is not already available
 	if ! systemctl is-active --quiet firewalld.service && ! hash iptables 2>/dev/null; then
 		if [[ "$os" == "centos" || "$os" == "fedora" ]]; then
 			firewall="firewalld"
 			# We don't want to silently enable firewalld, so we give a subtle warning
 			# If the user continues, firewalld will be installed and enabled during setup
-			echo
 			echo "firewalld, which is required to manage routing tables, will also be installed."
 		elif [[ "$os" == "debian" || "$os" == "ubuntu" ]]; then
 			# iptables is way less invasive than firewalld so no warning is given
 			firewall="iptables"
 		fi
 	fi
-	echo
 	read -n1 -r -p "Press any key to continue..."
 	# Install WireGuard
 	ppa_key='-----BEGIN PGP PUBLIC KEY BLOCK-----
@@ -544,7 +539,7 @@ EOF
 	fi
 	echo
 	qrencode -t UTF8 < ~/"$client.conf"
-	echo -e '\xE2\x86\x91 That is a QR code containing your client configuration.'
+	echo -e '\xE2\x86\x91 That is a QR code containing the client configuration.'
 	echo
 	# If the kernel module didn't load, system probably had an outdated kernel
 	# We'll try to help, but will not will not force a kernel upgrade upon the user
@@ -556,38 +551,38 @@ EOF
 	    elif [[ "$os" == "debian" && "$os_version" -eq 10 ]]; then
 	        echo "Upgrade the kernel with \"apt-get install linux-image-$architecture\" and restart."
 	    elif [[ "$os" == "centos" && "$os_version" -le 8 ]]; then
-			echo "Reboot your system to load the most recent kernel."
+			echo "Reboot the system to load the most recent kernel."
 	    fi
 	else
     	echo "Finished!"
 	fi
 	echo
-	echo "Your client configuration is available at:" ~/"$client.conf"
-	echo "If you want to add more clients, just run this script again."
+	echo "The client configuration is available in:" ~/"$client.conf"
+	echo "New clients can be added by running this script again."
 else
 	clear
-	echo "Looks like WireGuard is already installed."
+	echo "WireGuard is already installed."
 	echo
-	echo "What do you want to do?"
+	echo "Select an option:"
 	echo "   1) Add a new user"
 	echo "   2) Remove an existing user"
 	echo "   3) Remove WireGuard"
 	echo "   4) Exit"
-	read -p "Select an option: " option
+	read -p "Option: " option
 	until [[ "$option" =~ ^[1-4]$ ]]; do
 		echo "$option: invalid selection."
-		read -p "Select an option: " option
+		read -p "Option: " option
 	done
 	case "$option" in
 		1)
 			echo
-			echo "Tell me a name for the client."
-			read -p "Client name: " unsanitized_client
+			echo "Provide a name for the client:"
+			read -p "Name: " unsanitized_client
 			# Allow a limited set of characters to avoid conflicts
 			client=$(sed 's/[^0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_-]/_/g' <<< "$unsanitized_client")
 			while [[ -z "$client" || -n $(grep "^# BEGIN_PEER $client$" /etc/wireguard/wg0.conf) ]]; do
-				echo "$client: invalid client name."
-				read -p "Client name: " unsanitized_client
+				echo "$client: invalid name."
+				read -p "Name: " unsanitized_client
 				client=$(sed 's/[^0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_-]/_/g' <<< "$unsanitized_client")
 			done
 			echo
@@ -599,7 +594,7 @@ else
 			qrencode -t UTF8 < ~/"$client.conf"
 			echo -e '\xE2\x86\x91 That is a QR code containing your client configuration.'
 			echo
-			echo "Client $client added, configuration is available at:" ~/"$client.conf"
+			echo "$client added. Configuration available in:" ~/"$client.conf"
 			exit
 		;;
 		2)
@@ -608,23 +603,23 @@ else
 			number_of_clients=$(grep -c '^# BEGIN_PEER' /etc/wireguard/wg0.conf)
 			if [[ "$number_of_clients" = 0 ]]; then
 				echo
-				echo "You have no existing clients!"
+				echo "There are no existing clients!"
 				exit
 			fi
 			echo
-			echo "Select the existing client you want to remove:"
+			echo "Select the client to remove:"
 			grep '^# BEGIN_PEER' /etc/wireguard/wg0.conf | cut -d ' ' -f 3 | nl -s ') '
-			read -p "Select one client: " client_number
+			read -p "Client: " client_number
 			until [[ "$client_number" =~ ^[0-9]+$ && "$client_number" -le "$number_of_clients" ]]; do
 				echo "$client_number: invalid selection."
-				read -p "Select one client: " client_number
+				read -p "Client: " client_number
 			done
 			client=$(grep '^# BEGIN_PEER' /etc/wireguard/wg0.conf | cut -d ' ' -f 3 | sed -n "$client_number"p)
 			echo
-			read -p "Do you really want to remove access for client $client? [y/N]: " remove
+			read -p "Confirm $client removal? [y/N]: " remove
 			until [[ "$remove" =~ ^[yYnN]*$ ]]; do
 				echo "$remove: invalid selection."
-				read -p "Do you really want to remove access for client $client? [y/N]: " remove
+				read -p "Confirm $client removal? [y/N]: " remove
 			done
 			if [[ "$remove" =~ ^[yY]$ ]]; then
 				# The following is the right way to avoid disrupting other active connections:
@@ -633,19 +628,19 @@ else
 				# Remove from the configuration file
 				sed -i "/^# BEGIN_PEER $client/,/^# END_PEER $client/d" /etc/wireguard/wg0.conf
 				echo
-				echo "Client $client has been removed!"
+				echo "$client removed!"
 			else
 				echo
-				echo "Removal of client $client aborted!"
+				echo "$client removal aborted!"
 			fi
 			exit
 		;;
 		3)
 			echo
-			read -p "Do you really want to remove WireGuard? [y/N]: " remove
+			read -p "Confirm WireGuard removal? [y/N]: " remove
 			until [[ "$remove" =~ ^[yYnN]*$ ]]; do
 				echo "$remove: invalid selection."
-				read -p "Do you really want to remove WireGuard? [y/N]: " remove
+				read -p "Confirm WireGuard removal? [y/N]: " remove
 			done
 			if [[ "$remove" =~ ^[yY]$ ]]; then
 				port=$(grep '^ListenPort' /etc/wireguard/wg0.conf | cut -d " " -f 3)
@@ -736,7 +731,7 @@ else
 				echo "WireGuard removed!"
 			else
 				echo
-				echo "Removal aborted!"
+				echo "WireGuard removal aborted!"
 			fi
 			exit
 		;;
