@@ -6,16 +6,11 @@
 
 
 # Discard stdin. Needed when running from an one-liner which includes a newline
-read -N 999999999 -t 0.001
+read -N 999999 -t 0.001
 
 # Detect Debian users running the script with "sh" instead of bash
 if readlink /proc/$$/exe | grep -q "dash"; then
 	echo 'This installer needs to be run with "bash", not "sh".'
-	exit
-fi
-
-if [[ "$EUID" -ne 0 ]]; then
-	echo "This installer needs to be run with superuser privileges."
 	exit
 fi
 
@@ -30,19 +25,15 @@ fi
 if grep -qs "ubuntu" /etc/os-release; then
 	os="ubuntu"
 	os_version=$(grep 'VERSION_ID' /etc/os-release | cut -d '"' -f 2 | tr -d '.')
-	group_name="nogroup"
 elif [[ -e /etc/debian_version ]]; then
 	os="debian"
 	os_version=$(grep -oE '[0-9]+' /etc/debian_version | head -1)
-	group_name="nogroup"
 elif [[ -e /etc/centos-release ]]; then
 	os="centos"
 	os_version=$(grep -oE '[0-9]+' /etc/centos-release | head -1)
-	group_name="nobody"
 elif [[ -e /etc/fedora-release ]]; then
 	os="fedora"
 	os_version=$(grep -oE '[0-9]+' /etc/fedora-release | head -1)
-	group_name="nobody"
 else
 	echo "This installer seems to be running on an unsupported distribution.
 Supported distributions are Ubuntu, Debian, CentOS, and Fedora."
@@ -68,7 +59,7 @@ This version of CentOS is too old and unsupported."
 fi
 
 # Detect environments where $PATH does not include the sbin directories
-if ! grep -q sbin <<< $PATH; then
+if ! grep -q sbin <<< "$PATH"; then
 	echo '$PATH does not include sbin. Try using "su -" instead of "su".'
 	exit
 fi
@@ -79,6 +70,11 @@ is_container="$?"
 if [[ "$os" == "fedora" && "$os_version" -eq 31 && $(uname -r | cut -d "." -f 2) -lt 6 && ! "$is_container" -eq 0 ]]; then
 	echo 'Fedora 31 is supported, but the kernel is outdated.
 Upgrade the kernel using "dnf upgrade kernel" and restart.'
+	exit
+fi
+
+if [[ "$EUID" -ne 0 ]]; then
+	echo "This installer needs to be run with superuser privileges."
 	exit
 fi
 
@@ -145,12 +141,12 @@ new_client_setup () {
 	# available octet. Important to start looking at 2, because 1 is our gateway.
 	octet=2
 	while grep AllowedIPs /etc/wireguard/wg0.conf | cut -d "." -f 4 | cut -d "/" -f 1 | grep -q "$octet"; do
-	    (( octet++ ))
+		(( octet++ ))
 	done
 	# Don't break the WireGuard configuration in case the address space is full
 	if [[ "$octet" -eq 255 ]]; then
-    	echo "253 clients are already configured. The WireGuard internal subnet is full!"
-    	exit
+		echo "253 clients are already configured. The WireGuard internal subnet is full!"
+		exit
 	fi
 	key=$(wg genkey)
 	psk=$(wg genpsk)
@@ -206,8 +202,8 @@ if [[ ! -e /etc/wireguard/wg0.conf ]]; then
 		get_public_ip=$(grep -m 1 -oE '^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$' <<< "$(wget -T 10 -t 1 -4qO- "http://ip1.dynupdate.no-ip.com/" || curl -m 10 -4Ls "http://ip1.dynupdate.no-ip.com/")")
 		read -p "Public IPv4 address / hostname [$get_public_ip]: " public_ip
 		# If the checkip service is unavailable and user didn't provide input, ask again
-		until [[ -n "$get_public_ip" || -n $public_ip ]]; do
-    		echo "Invalid input."
+		until [[ -n "$get_public_ip" || -n "$public_ip" ]]; do
+			echo "Invalid input."
 			read -p "Public IPv4 address / hostname: " public_ip
 		done
 		[[ -z "$public_ip" ]] && public_ip="$get_public_ip"
@@ -238,13 +234,21 @@ if [[ ! -e /etc/wireguard/wg0.conf ]]; then
 		read -p "Port [51820]: " port
 	done
 	[[ -z "$port" ]] && port="51820"
+	echo
+	echo "Enter a name for the first client:"
+	read -p "Name [client]: " unsanitized_client
+	# Allow a limited set of characters to avoid conflicts
+	client=$(sed 's/[^0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_-]/_/g' <<< "$unsanitized_client")
+	[[ -z "$client" ]] && client="client"
+	echo
+	new_client_dns
 	# Set up automatic updates for BoringTun if the user is fine with that
 	if [[ "$is_container" -eq 0 ]]; then
-    	echo
-    	echo "BoringTun will be installed to set up WireGuard in the system."
-    	read -p "Should automatic updates be enabled for it? [Y/n]: " boringtun_updates
-    	until [[ "$boringtun_updates" =~ ^[yYnN]*$ ]]; do
-	    	echo "$remove: invalid selection."
+		echo
+		echo "BoringTun will be installed to set up WireGuard in the system."
+		read -p "Should automatic updates be enabled for it? [Y/n]: " boringtun_updates
+		until [[ "$boringtun_updates" =~ ^[yYnN]*$ ]]; do
+			echo "$remove: invalid selection."
 			read -p "Should automatic updates be enabled for it? [Y/n]: " boringtun_updates
 		done
 		if [[ "$boringtun_updates" =~ ^[yY]*$ ]]; then
@@ -256,15 +260,7 @@ if [[ ! -e /etc/wireguard/wg0.conf ]]; then
 		fi
 	fi
 	echo
-	echo "Enter a name for the first client:"
-	read -p "Name [client]: " unsanitized_client
-	# Allow a limited set of characters to avoid conflicts
-	client=$(sed 's/[^0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_-]/_/g' <<< "$unsanitized_client")
-	[[ -z "$client" ]] && client="client"
-	echo
-	new_client_dns
-	echo
-	echo "WireGuard installation is ready to begin now."
+	echo "WireGuard installation is ready to begin."
 	# Install a firewall in the rare case where one is not already available
 	if ! systemctl is-active --quiet firewalld.service && ! hash iptables 2>/dev/null; then
 		if [[ "$os" == "centos" || "$os" == "fedora" ]]; then
@@ -312,7 +308,7 @@ fiJGS5WoFr1yr8b7oQxTrZlCeHk3r3FJIhv2dQ==
 		if [[ "$os" == "ubuntu" && "$os_version" -ge 2004 ]]; then
 			# Ubuntu 20.04 or higer
 			apt-get update
-			apt-get install -y wireguard qrencode $firewall
+			apt-get install -y wireguard qrencode "$firewall"
 		elif [[ "$os" == "ubuntu" && "$os_version" -eq 1804 ]]; then
 			# Ubuntu 18.04
 			# Repo is added manually so we don't depend on add-apt-repository.
@@ -326,21 +322,21 @@ fiJGS5WoFr1yr8b7oQxTrZlCeHk3r3FJIhv2dQ==
 			apt-get update
 			# Try to install kernel headers for the running kernel and avoid a reboot. This
 			# can fail, so it's important to run separately from the other apt-get command.
-			apt-get install -y linux-headers-$(uname -r)
+			apt-get install -y linux-headers-"$(uname -r)"
 			# linux-headers-generic points to the latest headers. We install it because if
 			# the system has an outdated kernel, there is no guarantee that old headers were
 			# still downloadable and to provide suitable headers for future kernel updates.
 			apt-get install -y linux-headers-generic
-			apt-get install -y wireguard qrencode $firewall
+			apt-get install -y wireguard qrencode "$firewall"
 		elif [[ "$os" == "debian" && "$os_version" -eq 10 ]]; then
 			# Debian 10
 			if ! grep -qs '^deb .* buster-backports main' /etc/apt/sources.list /etc/apt/sources.list.d/*.list; then
-    			echo "deb http://deb.debian.org/debian buster-backports main" >> /etc/apt/sources.list
+				echo "deb http://deb.debian.org/debian buster-backports main" >> /etc/apt/sources.list
 			fi
 			apt-get update
 			# Try to install kernel headers for the running kernel and avoid a reboot. This
 			# can fail, so it's important to run separately from the other apt-get command.
-			apt-get install -y linux-headers-$(uname -r)
+			apt-get install -y linux-headers-"$(uname -r)"
 			# There are cleaner ways to find out the $architecture, but we require an
 			# specific format for the package name and this approach provides what we need.
 			architecture=$(dpkg --get-selections 'linux-image-*-*' | cut -f 1 | grep -oE '[^-]*$' -m 1)
@@ -349,21 +345,21 @@ fiJGS5WoFr1yr8b7oQxTrZlCeHk3r3FJIhv2dQ==
 			# headers were still downloadable and to provide suitable headers for future
 			# kernel updates.
 			apt-get install -y linux-headers-"$architecture"
-			apt-get install -y wireguard qrencode $firewall
+			apt-get install -y wireguard qrencode "$firewall"
 		elif [[ "$os" == "centos" && "$os_version" -eq 8 ]]; then
 			# CentOS 8
 			dnf install -y epel-release elrepo-release
-			dnf install -y kmod-wireguard wireguard-tools qrencode $firewall
+			dnf install -y kmod-wireguard wireguard-tools qrencode "$firewall"
 			mkdir -p /etc/wireguard/
 		elif [[ "$os" == "centos" && "$os_version" -eq 7 ]]; then
 			# CentOS 7
 			yum install -y epel-release https://www.elrepo.org/elrepo-release-7.el7.elrepo.noarch.rpm
 			yum install -y yum-plugin-elrepo
-			yum install -y kmod-wireguard wireguard-tools qrencode $firewall
+			yum install -y kmod-wireguard wireguard-tools qrencode "$firewall"
 			mkdir -p /etc/wireguard/
 		elif [[ "$os" == "fedora" ]]; then
 			# Fedora
-			dnf install -y wireguard-tools qrencode $firewall
+			dnf install -y wireguard-tools qrencode "$firewall"
 			mkdir -p /etc/wireguard/
 		fi
 	# Else, we are inside a container and BoringTun needs to be used
@@ -372,7 +368,7 @@ fiJGS5WoFr1yr8b7oQxTrZlCeHk3r3FJIhv2dQ==
 		if [[ "$os" == "ubuntu" && "$os_version" -ge 2004 ]]; then
 			# Ubuntu 20.04 or higer
 			apt-get update
-			apt-get install -y wireguard-tools qrencode ca-certificates $cron $firewall
+			apt-get install -y wireguard-tools qrencode ca-certificates "$cron" "$firewall"
 		elif [[ "$os" == "ubuntu" && "$os_version" -eq 1804 ]]; then
 			# Ubuntu 18.04
 			# Repo is added manually so we don't depend on add-apt-repository.
@@ -384,29 +380,29 @@ fiJGS5WoFr1yr8b7oQxTrZlCeHk3r3FJIhv2dQ==
 			apt-key add - <<< "$ppa_key"
 			echo "deb http://ppa.launchpad.net/wireguard/wireguard/ubuntu bionic main" > /etc/apt/sources.list.d/wireguard-ubuntu-wireguard-bionic.list
 			apt-get update
-			apt-get install -y qrencode ca-certificates $cron $firewall
-        	apt-get install -y wireguard-tools --no-install-recommends
+			apt-get install -y qrencode ca-certificates "$cron" "$firewall"
+			apt-get install -y wireguard-tools --no-install-recommends
 		elif [[ "$os" == "debian" && "$os_version" -eq 10 ]]; then
 			# Debian 10
 			if ! grep -qs '^deb .* buster-backports main' /etc/apt/sources.list /etc/apt/sources.list.d/*.list; then
-    			echo "deb http://deb.debian.org/debian buster-backports main" >> /etc/apt/sources.list
+				echo "deb http://deb.debian.org/debian buster-backports main" >> /etc/apt/sources.list
 			fi
 			apt-get update
-			apt-get install -y qrencode ca-certificates $cron $firewall
-        	apt-get install -y wireguard-tools --no-install-recommends
+			apt-get install -y qrencode ca-certificates "$cron" "$firewall"
+			apt-get install -y wireguard-tools --no-install-recommends
 		elif [[ "$os" == "centos" && "$os_version" -eq 8 ]]; then
 			# CentOS 8
 			dnf install -y epel-release
-			dnf install -y wireguard-tools qrencode ca-certificates tar $cron $firewall
+			dnf install -y wireguard-tools qrencode ca-certificates tar "$cron" "$firewall"
 			mkdir -p /etc/wireguard/
 		elif [[ "$os" == "centos" && "$os_version" -eq 7 ]]; then
 			# CentOS 7
 			yum install -y epel-release
-			yum install -y wireguard-tools qrencode ca-certificates tar $cron $firewall
+			yum install -y wireguard-tools qrencode ca-certificates tar "$cron" "$firewall"
 			mkdir -p /etc/wireguard/
 		elif [[ "$os" == "fedora" ]]; then
 			# Fedora
-			dnf install -y wireguard-tools qrencode ca-certificates tar $cron $firewall
+			dnf install -y wireguard-tools qrencode ca-certificates tar "$cron" "$firewall"
 			mkdir -p /etc/wireguard/
 		fi
 		# Grab the BoringTun binary using wget or curl and extract into the right place.
@@ -470,7 +466,7 @@ EOF
 		ip6tables_path=$(command -v ip6tables)
 		# nf_tables is not available as standard in OVZ kernels. So use iptables-legacy
 		# if we are in OVZ, with a nf_tables backend and iptables-legacy is available.
-		if [[ $(systemd-detect-virt) == "openvz" ]] && readlink -f $(command -v iptables) | grep -q "nft" && hash iptables-legacy 2>/dev/null; then
+		if [[ $(systemd-detect-virt) == "openvz" ]] && readlink -f "$(command -v iptables)" | grep -q "nft" && hash iptables-legacy 2>/dev/null; then
 			iptables_path=$(command -v iptables-legacy)
 			ip6tables_path=$(command -v ip6tables-legacy)
 		fi
@@ -544,17 +540,17 @@ EOF
 	# If the kernel module didn't load, system probably had an outdated kernel
 	# We'll try to help, but will not will not force a kernel upgrade upon the user
 	if [[ ! "$is_container" -eq 0 ]] && ! modprobe -nq wireguard; then
-	    echo "Warning!"
-	    echo "Installation was finished, but the WireGuard kernel module could not load."
-	    if [[ "$os" == "ubuntu" && "$os_version" -eq 1804 ]]; then
-	        echo 'Upgrade the kernel and headers with "apt-get install linux-generic" and restart.'
-	    elif [[ "$os" == "debian" && "$os_version" -eq 10 ]]; then
-	        echo "Upgrade the kernel with \"apt-get install linux-image-$architecture\" and restart."
-	    elif [[ "$os" == "centos" && "$os_version" -le 8 ]]; then
+		echo "Warning!"
+		echo "Installation was finished, but the WireGuard kernel module could not load."
+		if [[ "$os" == "ubuntu" && "$os_version" -eq 1804 ]]; then
+		echo 'Upgrade the kernel and headers with "apt-get install linux-generic" and restart.'
+		elif [[ "$os" == "debian" && "$os_version" -eq 10 ]]; then
+		echo "Upgrade the kernel with \"apt-get install linux-image-$architecture\" and restart."
+		elif [[ "$os" == "centos" && "$os_version" -le 8 ]]; then
 			echo "Reboot the system to load the most recent kernel."
-	    fi
+		fi
 	else
-    	echo "Finished!"
+		echo "Finished!"
 	fi
 	echo
 	echo "The client configuration is available in:" ~/"$client.conf"
@@ -564,8 +560,8 @@ else
 	echo "WireGuard is already installed."
 	echo
 	echo "Select an option:"
-	echo "   1) Add a new user"
-	echo "   2) Remove an existing user"
+	echo "   1) Add a new client"
+	echo "   2) Remove an existing client"
 	echo "   3) Remove WireGuard"
 	echo "   4) Exit"
 	read -p "Option: " option
@@ -580,7 +576,7 @@ else
 			read -p "Name: " unsanitized_client
 			# Allow a limited set of characters to avoid conflicts
 			client=$(sed 's/[^0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_-]/_/g' <<< "$unsanitized_client")
-			while [[ -z "$client" || -n $(grep "^# BEGIN_PEER $client$" /etc/wireguard/wg0.conf) ]]; do
+			while [[ -z "$client" ]] || grep -q "^# BEGIN_PEER $client$" /etc/wireguard/wg0.conf; do
 				echo "$client: invalid name."
 				read -p "Name: " unsanitized_client
 				client=$(sed 's/[^0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_-]/_/g' <<< "$unsanitized_client")
@@ -624,7 +620,7 @@ else
 			if [[ "$remove" =~ ^[yY]$ ]]; then
 				# The following is the right way to avoid disrupting other active connections:
 				# Remove from the live interface
-				wg set wg0 peer $(sed -n "/^# BEGIN_PEER $client$/,\$p" /etc/wireguard/wg0.conf | grep -m 1 PublicKey | cut -d " " -f 3) remove
+				wg set wg0 peer "$(sed -n "/^# BEGIN_PEER $client$/,\$p" /etc/wireguard/wg0.conf | grep -m 1 PublicKey | cut -d " " -f 3)" remove
 				# Remove from the configuration file
 				sed -i "/^# BEGIN_PEER $client/,/^# END_PEER $client/d" /etc/wireguard/wg0.conf
 				echo
@@ -725,7 +721,7 @@ else
 						rm -rf /etc/wireguard/
 						dnf remove -y wireguard-tools
 					fi
-                    rm -f /usr/local/sbin/boringtun /usr/local/sbin/boringtun-upgrade
+					rm -f /usr/local/sbin/boringtun /usr/local/sbin/boringtun-upgrade
 				fi
 				echo
 				echo "WireGuard removed!"
