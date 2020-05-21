@@ -588,8 +588,8 @@ else
 			echo
 			new_client_dns
 			new_client_setup
-			# Append the configuration to the WireGuard interface
-			wg addconf wg0 <(wg-quick strip wg0)
+			# Append new client configuration to the WireGuard interface
+			wg addconf wg0 <(sed -n "/^# BEGIN_PEER $client/,/^# END_PEER $client/p" /etc/wireguard/wg0.conf)
 			echo
 			qrencode -t UTF8 < ~/"$client.conf"
 			echo -e '\xE2\x86\x91 That is a QR code containing your client configuration.'
