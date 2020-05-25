@@ -308,7 +308,7 @@ fiJGS5WoFr1yr8b7oQxTrZlCeHk3r3FJIhv2dQ==
 		if [[ "$os" == "ubuntu" && "$os_version" -ge 2004 ]]; then
 			# Ubuntu 20.04 or higer
 			apt-get update
-			apt-get install -y wireguard qrencode "$firewall"
+			apt-get install -y wireguard qrencode $firewall
 		elif [[ "$os" == "ubuntu" && "$os_version" -eq 1804 ]]; then
 			# Ubuntu 18.04
 			# Repo is added manually so we don't depend on add-apt-repository.
@@ -327,7 +327,7 @@ fiJGS5WoFr1yr8b7oQxTrZlCeHk3r3FJIhv2dQ==
 			# the system has an outdated kernel, there is no guarantee that old headers were
 			# still downloadable and to provide suitable headers for future kernel updates.
 			apt-get install -y linux-headers-generic
-			apt-get install -y wireguard qrencode "$firewall"
+			apt-get install -y wireguard qrencode $firewall
 		elif [[ "$os" == "debian" && "$os_version" -eq 10 ]]; then
 			# Debian 10
 			if ! grep -qs '^deb .* buster-backports main' /etc/apt/sources.list /etc/apt/sources.list.d/*.list; then
@@ -345,21 +345,21 @@ fiJGS5WoFr1yr8b7oQxTrZlCeHk3r3FJIhv2dQ==
 			# headers were still downloadable and to provide suitable headers for future
 			# kernel updates.
 			apt-get install -y linux-headers-"$architecture"
-			apt-get install -y wireguard qrencode "$firewall"
+			apt-get install -y wireguard qrencode $firewall
 		elif [[ "$os" == "centos" && "$os_version" -eq 8 ]]; then
 			# CentOS 8
 			dnf install -y epel-release elrepo-release
-			dnf install -y kmod-wireguard wireguard-tools qrencode "$firewall"
+			dnf install -y kmod-wireguard wireguard-tools qrencode $firewall
 			mkdir -p /etc/wireguard/
 		elif [[ "$os" == "centos" && "$os_version" -eq 7 ]]; then
 			# CentOS 7
 			yum install -y epel-release https://www.elrepo.org/elrepo-release-7.el7.elrepo.noarch.rpm
 			yum install -y yum-plugin-elrepo
-			yum install -y kmod-wireguard wireguard-tools qrencode "$firewall"
+			yum install -y kmod-wireguard wireguard-tools qrencode $firewall
 			mkdir -p /etc/wireguard/
 		elif [[ "$os" == "fedora" ]]; then
 			# Fedora
-			dnf install -y wireguard-tools qrencode "$firewall"
+			dnf install -y wireguard-tools qrencode $firewall
 			mkdir -p /etc/wireguard/
 		fi
 	# Else, we are inside a container and BoringTun needs to be used
@@ -368,7 +368,7 @@ fiJGS5WoFr1yr8b7oQxTrZlCeHk3r3FJIhv2dQ==
 		if [[ "$os" == "ubuntu" && "$os_version" -ge 2004 ]]; then
 			# Ubuntu 20.04 or higer
 			apt-get update
-			apt-get install -y wireguard-tools qrencode ca-certificates "$cron" "$firewall"
+			apt-get install -y wireguard-tools qrencode ca-certificates $cron $firewall
 		elif [[ "$os" == "ubuntu" && "$os_version" -eq 1804 ]]; then
 			# Ubuntu 18.04
 			# Repo is added manually so we don't depend on add-apt-repository.
@@ -380,7 +380,7 @@ fiJGS5WoFr1yr8b7oQxTrZlCeHk3r3FJIhv2dQ==
 			apt-key add - <<< "$ppa_key"
 			echo "deb http://ppa.launchpad.net/wireguard/wireguard/ubuntu bionic main" > /etc/apt/sources.list.d/wireguard-ubuntu-wireguard-bionic.list
 			apt-get update
-			apt-get install -y qrencode ca-certificates "$cron" "$firewall"
+			apt-get install -y qrencode ca-certificates $cron $firewall
 			apt-get install -y wireguard-tools --no-install-recommends
 		elif [[ "$os" == "debian" && "$os_version" -eq 10 ]]; then
 			# Debian 10
@@ -388,21 +388,21 @@ fiJGS5WoFr1yr8b7oQxTrZlCeHk3r3FJIhv2dQ==
 				echo "deb http://deb.debian.org/debian buster-backports main" >> /etc/apt/sources.list
 			fi
 			apt-get update
-			apt-get install -y qrencode ca-certificates "$cron" "$firewall"
+			apt-get install -y qrencode ca-certificates $cron $firewall
 			apt-get install -y wireguard-tools --no-install-recommends
 		elif [[ "$os" == "centos" && "$os_version" -eq 8 ]]; then
 			# CentOS 8
 			dnf install -y epel-release
-			dnf install -y wireguard-tools qrencode ca-certificates tar "$cron" "$firewall"
+			dnf install -y wireguard-tools qrencode ca-certificates tar $cron $firewall
 			mkdir -p /etc/wireguard/
 		elif [[ "$os" == "centos" && "$os_version" -eq 7 ]]; then
 			# CentOS 7
 			yum install -y epel-release
-			yum install -y wireguard-tools qrencode ca-certificates tar "$cron" "$firewall"
+			yum install -y wireguard-tools qrencode ca-certificates tar $cron $firewall
 			mkdir -p /etc/wireguard/
 		elif [[ "$os" == "fedora" ]]; then
 			# Fedora
-			dnf install -y wireguard-tools qrencode ca-certificates tar "$cron" "$firewall"
+			dnf install -y wireguard-tools qrencode ca-certificates tar $cron $firewall
 			mkdir -p /etc/wireguard/
 		fi
 		# Grab the BoringTun binary using wget or curl and extract into the right place.
