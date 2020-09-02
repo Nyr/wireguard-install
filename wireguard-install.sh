@@ -275,58 +275,11 @@ if [[ ! -e /etc/wireguard/wg0.conf ]]; then
 	fi
 	read -n1 -r -p "Press any key to continue..."
 	# Install WireGuard
-	ppa_key='-----BEGIN PGP PUBLIC KEY BLOCK-----
-
-xsFNBFgsdJkBEADF7kp11himOaaVQ5rYN05SjdkrNWG2OI+aA8GnBqHk8V9Cjabo
-5i+Dof7y6Efcr9kzkHZeRq3sFuyRd4hNBrsTvJbsBkeOZ/O9tUG/hTCBR0E4XHxb
-xyXFgdLNvLFKrhcfHo6lPlf5rCGPEp6obuNILh8lzpGKCi1AvC89nCtqZZqeyRKw
-MVv1Hf217nDAu3Swgv3iC5a1vncxCni4g5eV2tD8hyCmeIl2Cr/VBDzuFt7YUWCa
-TrBkgvE941YQo2xnia203aRiDFi/JhEVAiaNh+ycHQeNIW8bYsp6uoteR/DDoZpt
-YKMMQAhdD9QRHKTTDFfOs4a3G2nOsnTdgCcLQKlbHCZo53RSJcQrwOrt+QHop8Ut
-yWMcOQ6dk2JK5ISCW8B11XpFJWd/TAlQkLO2J3R7Il40g87k1UnHG58F7N37SNi1
-Hku3AH4sARx8mmcQAUhVHHiriJQ6W8DCE6tX7RBoRcSgA5NK9iCMmX6s+X297Die
-yttoGPfDPph6DTd/4SzL5HjQGsusfpYsJmIimNuksHUbyI/fwd7R1n8ho2ZYSbsQ
-XLo4NtTc+mD+xu4Au/FAWCQeNxZf6I5iFlhLMvYpswNHIc/TAy9NdEkBaVVt7ILP
-GtQNzEeNPdDMjyCsigqP7LtkB0tTuPngvJnZqMCAxnzBbQeLqv4+1MrjyQARAQAB
-zR9MYXVuY2hwYWQgUFBBIGZvciB3aXJlZ3VhcmQtcHBhwsF4BBMBAgAiBQJYLHSZ
-AhsDBgsJCAcDAgYVCAIJCgsEFgIDAQIeAQIXgAAKCRCuM4NfUEoaJUWCD/9i46Pu
-YjRa1xLNTCfwMKhy+xPmi3oiB59iWYfUS82XNISJE2ZVdXbWAmlVVl3enGa1oY4w
-aX2XZes4uAq/0S/QTZixHcCZs/vEVDdFg7UdvfswJ+eu4P/A6oh8JoJILMaIXhfy
-92wEjFrI2NV3tB/3aee4nxJsUYLbBx3DhRzTfHYXiP1zKJxPWBilNLbme8vhYiLc
-6PyUWFXzWms50Nk1c38mmMAv4lqlX7dC4U9HcZs3TT0oOC7oTU7l5F/0HMy0GzRl
-Ual7mDmtvcKsUS8HRlCSPDE44hwnXmeuhcV5bRPAlyRlyP63n8zzlzfzQ1sgFjo8
-vN7VEaQVxERManwpT3BTOfyFT82yUGHeGgTAs8FI3Fr6aGk04nH0xpPrCZCQfSAw
-ZoziI0DM3iWl603NBFZM7brYJvebQrH8CpiaqzlcvxQe9KfOA9ootSC2pOdLFMa7
-me8nZUSZCo2/9AfKpTlCl3szPmAeAHc/M++doc6VSIchaZgB2NybBLqbm/2hJhc0
-HwWxODILKCzBfjabqfnd+SeOIZkQ5JjYNVGqy4vOv5zkeQ9wVGHurzCGKfJ953ab
-bufG+23D72u9enVZT+L4zH666hdQ6zyM0lrYcrBfPPnZkrQxBIilpvlOdLYDieUE
-fiJGS5WoFr1yr8b7oQxTrZlCeHk3r3FJIhv2dQ==
-=3EYq
------END PGP PUBLIC KEY BLOCK-----'
 	# If not running inside a container, set up the WireGuard kernel module
 	if [[ ! "$is_container" -eq 0 ]]; then
-		if [[ "$os" == "ubuntu" && "$os_version" -ge 2004 ]]; then
-			# Ubuntu 20.04 or higer
+		if [[ "$os" == "ubuntu" ]]; then
+			# Ubuntu
 			apt-get update
-			apt-get install -y wireguard qrencode $firewall
-		elif [[ "$os" == "ubuntu" && "$os_version" -eq 1804 ]]; then
-			# Ubuntu 18.04
-			# Repo is added manually so we don't depend on add-apt-repository.
-			# gnupg is required to add the repo, we install it if not already present.
-			if ! dpkg -s gnupg &>/dev/null; then
-				apt-get update
-				apt-get install -y gnupg
-			fi
-			apt-key add - <<< "$ppa_key"
-			echo "deb http://ppa.launchpad.net/wireguard/wireguard/ubuntu bionic main" > /etc/apt/sources.list.d/wireguard-ubuntu-wireguard-bionic.list
-			apt-get update
-			# Try to install kernel headers for the running kernel and avoid a reboot. This
-			# can fail, so it's important to run separately from the other apt-get command.
-			apt-get install -y linux-headers-"$(uname -r)"
-			# linux-headers-generic points to the latest headers. We install it because if
-			# the system has an outdated kernel, there is no guarantee that old headers were
-			# still downloadable and to provide suitable headers for future kernel updates.
-			apt-get install -y linux-headers-generic
 			apt-get install -y wireguard qrencode $firewall
 		elif [[ "$os" == "debian" && "$os_version" -eq 10 ]]; then
 			# Debian 10
@@ -365,20 +318,8 @@ fiJGS5WoFr1yr8b7oQxTrZlCeHk3r3FJIhv2dQ==
 	# Else, we are inside a container and BoringTun needs to be used
 	else
 		# Install required packages
-		if [[ "$os" == "ubuntu" && "$os_version" -ge 2004 ]]; then
-			# Ubuntu 20.04 or higer
-			apt-get update
-			apt-get install -y wireguard-tools qrencode ca-certificates $cron $firewall
-		elif [[ "$os" == "ubuntu" && "$os_version" -eq 1804 ]]; then
-			# Ubuntu 18.04
-			# Repo is added manually so we don't depend on add-apt-repository.
-			# gnupg is required to add the repo, we install it if not already present.
-			if ! dpkg -s gnupg &>/dev/null; then
-				apt-get update
-				apt-get install -y gnupg
-			fi
-			apt-key add - <<< "$ppa_key"
-			echo "deb http://ppa.launchpad.net/wireguard/wireguard/ubuntu bionic main" > /etc/apt/sources.list.d/wireguard-ubuntu-wireguard-bionic.list
+		if [[ "$os" == "ubuntu" ]]; then
+			# Ubuntu
 			apt-get update
 			apt-get install -y qrencode ca-certificates $cron $firewall
 			apt-get install -y wireguard-tools --no-install-recommends
@@ -665,16 +606,10 @@ else
 				rm -f /etc/sysctl.d/30-wireguard-forward.conf
 				# Different packages were installed if the system was containerized or not
 				if [[ ! "$is_container" -eq 0 ]]; then
-					if [[ "$os" == "ubuntu" && "$os_version" -ge 2004 ]]; then
-						# Ubuntu 20.04 or higher
+					if [[ "$os" == "ubuntu" ]]; then
+						# Ubuntu
 						rm -rf /etc/wireguard/
 						apt-get remove --purge -y wireguard wireguard-tools
-					elif [[ "$os" == "ubuntu" && "$os_version" -eq 1804 ]]; then
-						# Ubuntu 18.04
-						rm -f /etc/apt/sources.list.d/wireguard-ubuntu-wireguard-bionic.list
-						apt-key del E1B39B6EF6DDB96564797591AE33835F504A1A25
-						rm -rf /etc/wireguard/
-						apt-get remove --purge -y wireguard wireguard-dkms wireguard-tools
 					elif [[ "$os" == "debian" && "$os_version" -eq 10 ]]; then
 						# Debian 10
 						rm -rf /etc/wireguard/
@@ -694,14 +629,8 @@ else
 					fi
 				else
 					{ crontab -l 2>/dev/null | grep -v '/usr/local/sbin/boringtun-upgrade' ; } | crontab -
-					if [[ "$os" == "ubuntu" && "$os_version" -ge 2004 ]]; then
-						# Ubuntu 20.04 or higher
-						rm -rf /etc/wireguard/
-						apt-get remove --purge -y wireguard-tools
-					elif [[ "$os" == "ubuntu" && "$os_version" -eq 1804 ]]; then
-						# Ubuntu 18.04
-						rm -f /etc/apt/sources.list.d/wireguard-ubuntu-wireguard-bionic.list
-						apt-key del E1B39B6EF6DDB96564797591AE33835F504A1A25
+					if [[ "$os" == "ubuntu" ]]; then
+						# Ubuntu
 						rm -rf /etc/wireguard/
 						apt-get remove --purge -y wireguard-tools
 					elif [[ "$os" == "debian" && "$os_version" -eq 10 ]]; then
