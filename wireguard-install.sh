@@ -138,7 +138,7 @@ new_client_dns () {
 
 new_client_setup () {
 	# Get the first 3 octets of wireguard's `Address`
-	first3octets=$(grep Address /etc/wireguard/wg0.conf | grep -Pom 1 '[0-9.]{7,15}' | rev | cut -d "." -f2- | rev) && echo $first3octets
+	first3octets=$(grep Address /etc/wireguard/wg0.conf | grep -Pom 1 '[0-9.]{7,15}' | rev | cut -d "." -f2- | rev)
 	# Given a list of the assigned internal IPv4 addresses, obtain the lowest still
 	# available octet. Important to start looking at 2, because 1 is our gateway.
 	octet=2
@@ -238,7 +238,6 @@ if [[ ! -e /etc/wireguard/wg0.conf ]]; then
     	read -p "WG Network [10.7.0.0/24]: " wg_private_net
     done
     [[ -z "$wg_private_net" ]] && wg_private_net="10.7.0.0/24"
-    echo $wg_private_net
 
 	echo
 	echo "What port should WireGuard listen to?"
