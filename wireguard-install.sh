@@ -100,8 +100,9 @@ new_client_dns () {
 	echo "   4) OpenDNS"
 	echo "   5) Quad9"
 	echo "   6) AdGuard"
+	echo "   7) WireGuard Interface"
 	read -p "DNS server [1]: " dns
-	until [[ -z "$dns" || "$dns" =~ ^[1-6]$ ]]; do
+	until [[ -z "$dns" || "$dns" =~ ^[1-7]$ ]]; do
 		echo "$dns: invalid selection."
 		read -p "DNS server [1]: " dns
 	done
@@ -132,6 +133,9 @@ new_client_dns () {
 		;;
 		6)
 			dns="94.140.14.14, 94.140.15.15"
+		;;
+		7)
+			dns="10.7.0.1"
 		;;
 	esac
 }
