@@ -135,7 +135,7 @@ new_client_dns () {
 			dns="94.140.14.14, 94.140.15.15"
 		;;
 		7)
-			read -p "Enter IP: " custom_dns_ip
+			read -p "Enter IP: " dns
 		;;
 	esac
 }
