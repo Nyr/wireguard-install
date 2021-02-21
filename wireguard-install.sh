@@ -92,6 +92,12 @@ TUN needs to be enabled before running this installer."
 	fi
 fi
 
+# Check wget/curl existence in the system 
+if ! [[ -f $(which curl) || -f $(which wget) ]]; then
+	echo 'wget/curl is not installed. Install them to continue the installation or check your $PATH envirovment variable.'
+	exit 1
+fi
+
 new_client_dns () {
 	echo "Select a DNS server for the client:"
 	echo "   1) Current system resolvers"
