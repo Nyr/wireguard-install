@@ -95,13 +95,14 @@ fi
 new_client_dns () {
 	echo "Select a DNS server for the client:"
 	echo "   1) Current system resolvers"
-	echo "   2) Google"
-	echo "   3) 1.1.1.1"
-	echo "   4) OpenDNS"
-	echo "   5) Quad9"
-	echo "   6) AdGuard"
+	echo "   2) Custom resolvers"
+	echo "   3) Google"
+	echo "   4) 1.1.1.1"
+	echo "   5) OpenDNS"
+	echo "   6) Quad9"
+	echo "   7) AdGuard"
 	read -p "DNS server [1]: " dns
-	until [[ -z "$dns" || "$dns" =~ ^[1-6]$ ]]; do
+	until [[ -z "$dns" || "$dns" =~ ^[1-7]$ ]]; do
 		echo "$dns: invalid selection."
 		read -p "DNS server [1]: " dns
 	done
@@ -119,18 +120,21 @@ new_client_dns () {
 			dns=$(grep -v '^#\|^;' "$resolv_conf" | grep '^nameserver' | grep -oE '[0-9]{1,3}(\.[0-9]{1,3}){3}' | xargs | sed -e 's/ /, /g')
 		;;
 		2)
-			dns="8.8.8.8, 8.8.4.4"
+			read -p "Enter custom DNS addresses: " dns
 		;;
 		3)
-			dns="1.1.1.1, 1.0.0.1"
+			dns="8.8.8.8, 8.8.4.4"
 		;;
 		4)
-			dns="208.67.222.222, 208.67.220.220"
+			dns="1.1.1.1, 1.0.0.1"
 		;;
 		5)
-			dns="9.9.9.9, 149.112.112.112"
+			dns="208.67.222.222, 208.67.220.220"
 		;;
 		6)
+			dns="9.9.9.9, 149.112.112.112"
+		;;
+		7)
 			dns="94.140.14.14, 94.140.15.15"
 		;;
 	esac
