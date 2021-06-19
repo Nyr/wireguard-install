@@ -376,12 +376,12 @@ ListenPort = $port
 EOF
 	chmod 600 /etc/wireguard/wg0.conf
 	# Enable net.ipv4.ip_forward for the system
-	echo 'net.ipv4.ip_forward=1' > /etc/sysctl.d/30-wireguard-forward.conf
+	echo 'net.ipv4.ip_forward=1' > /etc/sysctl.d/99-wireguard-forward.conf
 	# Enable without waiting for a reboot or service restart
 	echo 1 > /proc/sys/net/ipv4/ip_forward
 	if [[ -n "$ip6" ]]; then
 		# Enable net.ipv6.conf.all.forwarding for the system
-		echo "net.ipv6.conf.all.forwarding=1" >> /etc/sysctl.d/30-wireguard-forward.conf
+		echo "net.ipv6.conf.all.forwarding=1" >> /etc/sysctl.d/99-wireguard-forward.conf
 		# Enable without waiting for a reboot or service restart
 		echo 1 > /proc/sys/net/ipv6/conf/all/forwarding
 	fi
@@ -603,7 +603,7 @@ else
 				fi
 				systemctl disable --now wg-quick@wg0.service
 				rm -f /etc/systemd/system/wg-quick@wg0.service.d/boringtun.conf
-				rm -f /etc/sysctl.d/30-wireguard-forward.conf
+				rm -f /etc/sysctl.d/99-wireguard-forward.conf
 				# Different packages were installed if the system was containerized or not
 				if [[ ! "$is_container" -eq 0 ]]; then
 					if [[ "$os" == "ubuntu" ]]; then
