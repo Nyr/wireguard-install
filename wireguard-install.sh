@@ -201,7 +201,7 @@ if [[ ! -e /etc/wireguard/wg0.conf ]]; then
 		[[ -z "$ip_number" ]] && ip_number="1"
 		ip=$(ip -4 addr | grep inet | grep -vE '127(\.[0-9]{1,3}){3}' | cut -d '/' -f 1 | grep -oE '[0-9]{1,3}(\.[0-9]{1,3}){3}' | sed -n "$ip_number"p)
 	fi
-	# If $ip is a private IP address, the server must be behind NAT
+	# If $ip is a private IP address, the server must be behind NAT
 	if echo "$ip" | grep -qE '^(10\.|172\.1[6789]\.|172\.2[0-9]\.|172\.3[01]\.|192\.168)'; then
 		echo
 		echo "This server is behind NAT. What is the public IPv4 address or hostname?"
@@ -306,6 +306,11 @@ if [[ ! -e /etc/wireguard/wg0.conf ]]; then
 			# kernel updates.
 			apt-get install -y linux-headers-"$architecture"
 			apt-get install -y wireguard qrencode $firewall
+		elif [[ "$os" == "debian" && "$os_version" -eq 11 ]]; then
+			# Debian 11
+			apt-get update
+			# Debian 11 utilize kernel 5.10.0 with wireguard support included.
+			apt-get install -y wireguard qrencode $firewall
 		elif [[ "$os" == "centos" && "$os_version" -eq 8 ]]; then
 			# CentOS 8
 			dnf install -y epel-release elrepo-release
@@ -336,6 +341,10 @@ if [[ ! -e /etc/wireguard/wg0.conf ]]; then
 				echo "deb http://deb.debian.org/debian buster-backports main" >> /etc/apt/sources.list
 			fi
 			apt-get update
+			apt-get install -y qrencode ca-certificates $cron $firewall
+			apt-get install -y wireguard-tools --no-install-recommends
+		elif [[ "$os" == "debian" && "$os_version" -eq 11 ]]; then
+			# Debian 11
 			apt-get install -y qrencode ca-certificates $cron $firewall
 			apt-get install -y wireguard-tools --no-install-recommends
 		elif [[ "$os" == "centos" && "$os_version" -eq 8 ]]; then
@@ -621,6 +630,10 @@ else
 						# Debian 10
 						rm -rf /etc/wireguard/
 						apt-get remove --purge -y wireguard wireguard-dkms wireguard-tools
+					elif [[ "$os" == "debian" && "$os_version" -eq 11 ]]; then
+						# Debian 11
+						rm -rf /etc/wireguard/
+						apt purge -y wireguard wireguard-dkms wireguard-tools
 					elif [[ "$os" == "centos" && "$os_version" -eq 8 ]]; then
 						# CentOS 8
 						rm -rf /etc/wireguard/
@@ -644,6 +657,10 @@ else
 						# Debian 10
 						rm -rf /etc/wireguard/
 						apt-get remove --purge -y wireguard-tools
+					elif [[ "$os" == "debian" && "$os_version" -eq 11 ]]; then
+						# Debian 11
+						rm -rf /etc/wireguard/
+						apt purge -y wireguard-tools
 					elif [[ "$os" == "centos" && "$os_version" -eq 8 ]]; then
 						# CentOS 8
 						rm -rf /etc/wireguard/
