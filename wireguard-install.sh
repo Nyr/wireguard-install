@@ -268,7 +268,7 @@ if [[ ! -e /etc/wireguard/wg0.conf ]]; then
 	fi
 	echo
 	echo "WireGuard installation is ready to begin."
-	# Install a firewall in the rare case where one is not already available
+	# Install a firewall if firewalld or iptables are not already available
 	if ! systemctl is-active --quiet firewalld.service && ! hash iptables 2>/dev/null; then
 		if [[ "$os" == "centos" || "$os" == "fedora" ]]; then
 			firewall="firewalld"
@@ -286,6 +286,10 @@ if [[ ! -e /etc/wireguard/wg0.conf ]]; then
 	if [[ ! "$is_container" -eq 0 ]]; then
 		if [[ "$os" == "ubuntu" ]]; then
 			# Ubuntu
+			apt-get update
+			apt-get install -y wireguard qrencode $firewall
+		elif [[ "$os" == "debian" && "$os_version" -ge 11 ]]; then
+			# Debian 11 or higher
 			apt-get update
 			apt-get install -y wireguard qrencode $firewall
 		elif [[ "$os" == "debian" && "$os_version" -eq 10 ]]; then
@@ -327,6 +331,11 @@ if [[ ! -e /etc/wireguard/wg0.conf ]]; then
 		# Install required packages
 		if [[ "$os" == "ubuntu" ]]; then
 			# Ubuntu
+			apt-get update
+			apt-get install -y qrencode ca-certificates $cron $firewall
+			apt-get install -y wireguard-tools --no-install-recommends
+		elif [[ "$os" == "debian" && "$os_version" -ge 11 ]]; then
+			# Debian 11 or higher
 			apt-get update
 			apt-get install -y qrencode ca-certificates $cron $firewall
 			apt-get install -y wireguard-tools --no-install-recommends
@@ -617,6 +626,10 @@ else
 						# Ubuntu
 						rm -rf /etc/wireguard/
 						apt-get remove --purge -y wireguard wireguard-tools
+					elif [[ "$os" == "debian" && "$os_version" -ge 11 ]]; then
+						# Debian 11 or higher
+						rm -rf /etc/wireguard/
+						apt-get remove --purge -y wireguard wireguard-tools
 					elif [[ "$os" == "debian" && "$os_version" -eq 10 ]]; then
 						# Debian 10
 						rm -rf /etc/wireguard/
@@ -638,6 +651,10 @@ else
 					{ crontab -l 2>/dev/null | grep -v '/usr/local/sbin/boringtun-upgrade' ; } | crontab -
 					if [[ "$os" == "ubuntu" ]]; then
 						# Ubuntu
+						rm -rf /etc/wireguard/
+						apt-get remove --purge -y wireguard-tools
+					elif [[ "$os" == "debian" && "$os_version" -ge 11 ]]; then
+						# Debian 11 or higher
 						rm -rf /etc/wireguard/
 						apt-get remove --purge -y wireguard-tools
 					elif [[ "$os" == "debian" && "$os_version" -eq 10 ]]; then
