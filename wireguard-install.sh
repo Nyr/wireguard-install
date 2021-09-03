@@ -258,7 +258,8 @@ if [[ ! -e /etc/wireguard/wg0.conf ]]; then
 			echo "$remove: invalid selection."
 			read -p "Should automatic updates be enabled for it? [Y/n]: " boringtun_updates
 		done
-		if [[ "$boringtun_updates" =~ ^[yY]*$ ]]; then
+		[[ -z "$boringtun_updates" ]] && boringtun_updates="y"
+		if [[ "$boringtun_updates" =~ ^[yY]$ ]]; then
 			if [[ "$os" == "centos" || "$os" == "fedora" ]]; then
 				cron="cronie"
 			elif [[ "$os" == "debian" || "$os" == "ubuntu" ]]; then
@@ -457,7 +458,7 @@ WantedBy=multi-user.target" >> /etc/systemd/system/wg-iptables.service
 	# Enable and start the wg-quick service
 	systemctl enable --now wg-quick@wg0.service
 	# Set up automatic updates for BoringTun if the user wanted to
-	if [[ "$boringtun_updates" =~ ^[yY]*$ ]]; then
+	if [[ "$boringtun_updates" =~ ^[yY]$ ]]; then
 		# Deploy upgrade script
 		cat << 'EOF' > /usr/local/sbin/boringtun-upgrade
 #!/bin/bash
