@@ -96,8 +96,8 @@ new_client_dns () {
 	echo "Select a DNS server for the client:"
 	echo "   1) Current system resolvers"
 	echo "   2) Google"
-	echo "   3) 1.1.1.1"
-	echo "   4) OpenDNS"
+	echo "   3) Cloudflare"
+	echo "   4) Cisco OpenDNS"
 	echo "   5) Quad9"
 	echo "   6) AdGuard"
 	read -p "DNS server [1]: " dns
@@ -119,19 +119,91 @@ new_client_dns () {
 			dns=$(grep -v '^#\|^;' "$resolv_conf" | grep '^nameserver' | grep -oE '[0-9]{1,3}(\.[0-9]{1,3}){3}' | xargs | sed -e 's/ /, /g')
 		;;
 		2)
-			dns="8.8.8.8, 8.8.4.4"
+			dns="8.8.8.8, 8.8.4.4, 2001:4860:4860::8888, 2001:4860:4860::8844"
 		;;
 		3)
-			dns="1.1.1.1, 1.0.0.1"
+			echo "Select a Cloudflare server for the client:"
+			echo "   1) Standard"
+			echo "   2) Malware blocking only"
+			echo "   3) Malware and adult content blocking"
+			read -p "Cloudflare server [1]: " dns
+			until [[ -z "$dns" || "$dns" =~ ^[1-3]$ ]]; do
+				echo "$dns: invalid selection."
+				read -p "Cloudflare server [1]: " dns
+			done
+			case "$dns" in
+				1)
+					dns="1.1.1.1, 1.0.0.1, 2606:4700:4700::1111, 2606:4700:4700::1001"
+				;;
+				2)
+					dns="1.1.1.2, 1.0.0.2, 2606:4700:4700::1112, 2606:4700:4700::1002"
+				;;
+				3)
+					dns="1.1.1.3, 1.0.0.3, 2606:4700:4700::1113, 2606:4700:4700::1003"
+				;;
+			esac
 		;;
 		4)
-			dns="208.67.222.222, 208.67.220.220"
+			echo "Select a Cisco OpenDNS server for the client:"
+			echo "   1) Standard (DNS servers with custom filtering that protects your device from malware)"
+			echo "   2) FamilyShield (OpenDNS servers that provide adult content blocking)"
+			read -p "Cisco OpenDNS server [1]: " dns
+			until [[ -z "$dns" || "$dns" =~ ^[1-2]$ ]]; do
+				echo "$dns: invalid selection."
+				read -p "Cisco OpenDNS server [1]: " dns
+			done
+			case "$dns" in
+				1)
+					dns="208.67.222.222, 208.67.220.220, 2620:119:35::35, 2620:119:53::53"
+				;;
+				2)
+					dns="208.67.222.123, 208.67.220.123"
+				;;
+			esac
 		;;
 		5)
-			dns="9.9.9.9, 149.112.112.112"
+			echo "Select a Quad9 server for the client:"
+			echo "   1) Standard (Regular DNS servers which provide protection from phishing and spyware. It include blocklist, DNSSEC validation, and other security features.)"
+			echo "   2) Unsecured (Regular DNS servers which provide protection from phishing and spyware. It include blocklist, DNSSEC validation, and other security features.)"
+			echo "   3) ECS support (EDNS Client-Subnet is a method that includes components of end-user IP address data in requests that are sent to authoritative DNS servers. It provides security blocklist, DNSSEC, EDNS Client-Subnet.)"
+			read -p "Quad9 server [1]: " dns
+			until [[ -z "$dns" || "$dns" =~ ^[1-3]$ ]]; do
+				echo "$dns: invalid selection."
+				read -p "Quad9 server [1]: " dns
+			done
+			case "$dns" in
+				1)
+					dns="9.9.9.9, 149.112.112.112, 2620:fe::fe, 2620:fe::fe:9"
+				;;
+				2)
+					dns="9.9.9.10, 149.112.112.10, 2620:fe::10, 2620:fe::fe:10"
+				;;
+				3)
+					dns="9.9.9.11, 149.112.112.11, 2620:fe::11, 2620:fe::fe:11"
+				;;
+			esac
 		;;
 		6)
-			dns="94.140.14.14, 94.140.15.15"
+			echo "Select a AdGuard server for the client:"
+			echo "   1) Default (These servers provide blocking ads, tracking and phishing)"
+			echo "   2) Unsecured (These servers provide the Default features + Blocking adult websites + Safe search)"
+			echo "   3) ECS support (These servers provide a secure and reliable connection, but they don't filter anything like the \"Default\" and \"Family protection\" servers.)"
+			read -p "AdGuard server [1]: " dns
+			until [[ -z "$dns" || "$dns" =~ ^[1-3]$ ]]; do
+				echo "$dns: invalid selection."
+				read -p "AdGuard server [1]: " dns
+			done
+			case "$dns" in
+				1)
+					dns="94.140.14.14, 94.140.15.15, 2a10:50c0::ad1:ff, 2a10:50c0::ad2:ff"
+				;;
+				2)
+					dns="94.140.14.15, 94.140.15.16, 2a10:50c0::bad1:ff, 2a10:50c0::bad2:ff"
+				;;
+				3)
+					dns="94.140.14.140, 94.140.14.141, 2a10:50c0::1:ff, 2a10:50c0::2:ff"
+				;;
+			esac
 		;;
 	esac
 }
