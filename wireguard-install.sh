@@ -122,6 +122,7 @@ new_client_dns () {
 			dns="8.8.8.8, 8.8.4.4, 2001:4860:4860::8888, 2001:4860:4860::8844"
 		;;
 		3)
+			echo
 			echo "Select a Cloudflare server for the client:"
 			echo "   1) Standard"
 			echo "   2) Malware blocking only"
@@ -144,6 +145,7 @@ new_client_dns () {
 			esac
 		;;
 		4)
+			echo
 			echo "Select a Cisco OpenDNS server for the client:"
 			echo "   1) Standard (DNS servers with custom filtering that protects your device from malware)"
 			echo "   2) FamilyShield (OpenDNS servers that provide adult content blocking)"
@@ -162,6 +164,7 @@ new_client_dns () {
 			esac
 		;;
 		5)
+			echo
 			echo "Select a Quad9 server for the client:"
 			echo "   1) Standard (Regular DNS servers which provide protection from phishing and spyware. It include blocklist, DNSSEC validation, and other security features.)"
 			echo "   2) Unsecured (Regular DNS servers which provide protection from phishing and spyware. It include blocklist, DNSSEC validation, and other security features.)"
@@ -184,6 +187,7 @@ new_client_dns () {
 			esac
 		;;
 		6)
+			echo
 			echo "Select a AdGuard server for the client:"
 			echo "   1) Default (These servers provide blocking ads, tracking and phishing)"
 			echo "   2) Family Protection (These servers provide the Default features + Blocking adult websites + Safe search)"
