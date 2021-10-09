@@ -186,8 +186,8 @@ new_client_dns () {
 		6)
 			echo "Select a AdGuard server for the client:"
 			echo "   1) Default (These servers provide blocking ads, tracking and phishing)"
-			echo "   2) Unsecured (These servers provide the Default features + Blocking adult websites + Safe search)"
-			echo "   3) ECS support (These servers provide a secure and reliable connection, but they don't filter anything like the \"Default\" and \"Family protection\" servers.)"
+			echo "   2) Family Protection (These servers provide the Default features + Blocking adult websites + Safe search)"
+			echo "   3) Non-filtering (These servers provide a secure and reliable connection, but they don't filter anything like the \"Default\" and \"Family protection\" servers.)"
 			read -p "AdGuard server [1]: " dns
 			until [[ -z "$dns" || "$dns" =~ ^[1-3]$ ]]; do
 				echo "$dns: invalid selection."
