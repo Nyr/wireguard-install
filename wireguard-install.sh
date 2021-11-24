@@ -468,7 +468,7 @@ if ! head -1 <<< "$latest" | grep -qiE "^boringtun.+[0-9]+\.[0-9]+.*$"; then
 	echo "Update server unavailable"
 	exit
 fi
-current=$(boringtun -V)
+current=$(/usr/local/sbin/boringtun -V)
 if [[ "$current" != "$latest" ]]; then
 	download="https://wg.nyr.be/1/latest/download"
 	xdir=$(mktemp -d)
@@ -478,7 +478,7 @@ if [[ "$current" != "$latest" ]]; then
 		rm -f /usr/local/sbin/boringtun
 		mv "$xdir"/boringtun /usr/local/sbin/boringtun
 		systemctl start wg-quick@wg0.service
-		echo "Succesfully updated to $(boringtun -V)"
+		echo "Succesfully updated to $(/usr/local/sbin/boringtun -V)"
 	else
 		echo "boringtun update failed"
 	fi
