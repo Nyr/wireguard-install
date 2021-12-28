@@ -240,6 +240,10 @@ if [[ ! -e /etc/wireguard/wg0.conf ]]; then
 		echo "$port: invalid port."
 		read -p "Port [51820]: " port
 	done
+	until [[ -z "$port" || -z $(lsof -i :"$port") ]]; do
+		echo "Port $port is already in use. Please select another."
+		read -p "Port [51820]: " port
+	done
 	[[ -z "$port" ]] && port="51820"
 	echo
 	echo "Enter a name for the first client:"
