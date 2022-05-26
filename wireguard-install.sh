@@ -28,15 +28,15 @@ if grep -qs "ubuntu" /etc/os-release; then
 elif [[ -e /etc/debian_version ]]; then
 	os="debian"
 	os_version=$(grep -oE '[0-9]+' /etc/debian_version | head -1)
-elif [[ -e /etc/centos-release ]]; then
+elif [[ -e /etc/almalinux-release || -e /etc/rocky-release || -e /etc/centos-release ]]; then
 	os="centos"
-	os_version=$(grep -oE '[0-9]+' /etc/centos-release | head -1)
+	os_version=$(grep -shoE '[0-9]+' /etc/almalinux-release /etc/rocky-release /etc/centos-release | head -1)
 elif [[ -e /etc/fedora-release ]]; then
 	os="fedora"
 	os_version=$(grep -oE '[0-9]+' /etc/fedora-release | head -1)
 else
 	echo "This installer seems to be running on an unsupported distribution.
-Supported distributions are Ubuntu, Debian, CentOS, and Fedora."
+Supported distros are Ubuntu, Debian, AlmaLinux, Rocky Linux, CentOS and Fedora."
 	exit
 fi
 
@@ -180,6 +180,13 @@ EOF
 }
 
 if [[ ! -e /etc/wireguard/wg0.conf ]]; then
+	# Detect some Debian minimal setups where neither wget nor curl are installed
+	if ! hash wget 2>/dev/null && ! hash curl 2>/dev/null; then
+		echo "Wget is required to use this installer."
+		read -n1 -r -p "Press any key to install Wget and continue..."
+		apt-get update
+		apt-get install -y wget
+	fi
 	clear
 	echo 'Welcome to this WireGuard road warrior installer!'
 	# If system has a single IPv4, it is selected automatically. Else, ask the user
@@ -255,7 +262,8 @@ if [[ ! -e /etc/wireguard/wg0.conf ]]; then
 			echo "$remove: invalid selection."
 			read -p "Should automatic updates be enabled for it? [Y/n]: " boringtun_updates
 		done
-		if [[ "$boringtun_updates" =~ ^[yY]*$ ]]; then
+		[[ -z "$boringtun_updates" ]] && boringtun_updates="y"
+		if [[ "$boringtun_updates" =~ ^[yY]$ ]]; then
 			if [[ "$os" == "centos" || "$os" == "fedora" ]]; then
 				cron="cronie"
 			elif [[ "$os" == "debian" || "$os" == "ubuntu" ]]; then
@@ -265,7 +273,7 @@ if [[ ! -e /etc/wireguard/wg0.conf ]]; then
 	fi
 	echo
 	echo "WireGuard installation is ready to begin."
-	# Install a firewall in the rare case where one is not already available
+	# Install a firewall if firewalld or iptables are not already available
 	if ! systemctl is-active --quiet firewalld.service && ! hash iptables 2>/dev/null; then
 		if [[ "$os" == "centos" || "$os" == "fedora" ]]; then
 			firewall="firewalld"
@@ -283,6 +291,10 @@ if [[ ! -e /etc/wireguard/wg0.conf ]]; then
 	if [[ ! "$is_container" -eq 0 ]]; then
 		if [[ "$os" == "ubuntu" ]]; then
 			# Ubuntu
+			apt-get update
+			apt-get install -y wireguard qrencode $firewall
+		elif [[ "$os" == "debian" && "$os_version" -ge 11 ]]; then
+			# Debian 11 or higher
 			apt-get update
 			apt-get install -y wireguard qrencode $firewall
 		elif [[ "$os" == "debian" && "$os_version" -eq 10 ]]; then
@@ -324,6 +336,11 @@ if [[ ! -e /etc/wireguard/wg0.conf ]]; then
 		# Install required packages
 		if [[ "$os" == "ubuntu" ]]; then
 			# Ubuntu
+			apt-get update
+			apt-get install -y qrencode ca-certificates $cron $firewall
+			apt-get install -y wireguard-tools --no-install-recommends
+		elif [[ "$os" == "debian" && "$os_version" -ge 11 ]]; then
+			# Debian 11 or higher
 			apt-get update
 			apt-get install -y qrencode ca-certificates $cron $firewall
 			apt-get install -y wireguard-tools --no-install-recommends
@@ -380,12 +397,12 @@ ListenPort = $port
 EOF
 	chmod 600 /etc/wireguard/wg0.conf
 	# Enable net.ipv4.ip_forward for the system
-	echo 'net.ipv4.ip_forward=1' > /etc/sysctl.d/30-wireguard-forward.conf
+	echo 'net.ipv4.ip_forward=1' > /etc/sysctl.d/99-wireguard-forward.conf
 	# Enable without waiting for a reboot or service restart
 	echo 1 > /proc/sys/net/ipv4/ip_forward
 	if [[ -n "$ip6" ]]; then
 		# Enable net.ipv6.conf.all.forwarding for the system
-		echo "net.ipv6.conf.all.forwarding=1" >> /etc/sysctl.d/30-wireguard-forward.conf
+		echo "net.ipv6.conf.all.forwarding=1" >> /etc/sysctl.d/99-wireguard-forward.conf
 		# Enable without waiting for a reboot or service restart
 		echo 1 > /proc/sys/net/ipv6/conf/all/forwarding
 	fi
@@ -445,7 +462,7 @@ WantedBy=multi-user.target" >> /etc/systemd/system/wg-iptables.service
 	# Enable and start the wg-quick service
 	systemctl enable --now wg-quick@wg0.service
 	# Set up automatic updates for BoringTun if the user wanted to
-	if [[ "$boringtun_updates" =~ ^[yY]*$ ]]; then
+	if [[ "$boringtun_updates" =~ ^[yY]$ ]]; then
 		# Deploy upgrade script
 		cat << 'EOF' > /usr/local/sbin/boringtun-upgrade
 #!/bin/bash
@@ -455,7 +472,7 @@ if ! head -1 <<< "$latest" | grep -qiE "^boringtun.+[0-9]+\.[0-9]+.*$"; then
 	echo "Update server unavailable"
 	exit
 fi
-current=$(boringtun -V)
+current=$(/usr/local/sbin/boringtun -V)
 if [[ "$current" != "$latest" ]]; then
 	download="https://wg.nyr.be/1/latest/download"
 	xdir=$(mktemp -d)
@@ -465,7 +482,7 @@ if [[ "$current" != "$latest" ]]; then
 		rm -f /usr/local/sbin/boringtun
 		mv "$xdir"/boringtun /usr/local/sbin/boringtun
 		systemctl start wg-quick@wg0.service
-		echo "Succesfully updated to $(boringtun -V)"
+		echo "Succesfully updated to $(/usr/local/sbin/boringtun -V)"
 	else
 		echo "boringtun update failed"
 	fi
@@ -567,7 +584,7 @@ else
 				# Remove from the live interface
 				wg set wg0 peer "$(sed -n "/^# BEGIN_PEER $client$/,\$p" /etc/wireguard/wg0.conf | grep -m 1 PublicKey | cut -d " " -f 3)" remove
 				# Remove from the configuration file
-				sed -i "/^# BEGIN_PEER $client/,/^# END_PEER $client/d" /etc/wireguard/wg0.conf
+				sed -i "/^# BEGIN_PEER $client$/,/^# END_PEER $client$/d" /etc/wireguard/wg0.conf
 				echo
 				echo "$client removed!"
 			else
@@ -607,11 +624,15 @@ else
 				fi
 				systemctl disable --now wg-quick@wg0.service
 				rm -f /etc/systemd/system/wg-quick@wg0.service.d/boringtun.conf
-				rm -f /etc/sysctl.d/30-wireguard-forward.conf
+				rm -f /etc/sysctl.d/99-wireguard-forward.conf
 				# Different packages were installed if the system was containerized or not
 				if [[ ! "$is_container" -eq 0 ]]; then
 					if [[ "$os" == "ubuntu" ]]; then
 						# Ubuntu
+						rm -rf /etc/wireguard/
+						apt-get remove --purge -y wireguard wireguard-tools
+					elif [[ "$os" == "debian" && "$os_version" -ge 11 ]]; then
+						# Debian 11 or higher
 						rm -rf /etc/wireguard/
 						apt-get remove --purge -y wireguard wireguard-tools
 					elif [[ "$os" == "debian" && "$os_version" -eq 10 ]]; then
@@ -620,21 +641,25 @@ else
 						apt-get remove --purge -y wireguard wireguard-dkms wireguard-tools
 					elif [[ "$os" == "centos" && "$os_version" -eq 8 ]]; then
 						# CentOS 8
-						rm -rf /etc/wireguard/
 						dnf remove -y kmod-wireguard wireguard-tools
+						rm -rf /etc/wireguard/
 					elif [[ "$os" == "centos" && "$os_version" -eq 7 ]]; then
 						# CentOS 7
-						rm -rf /etc/wireguard/
 						yum remove -y kmod-wireguard wireguard-tools
+						rm -rf /etc/wireguard/
 					elif [[ "$os" == "fedora" ]]; then
 						# Fedora
-						rm -rf /etc/wireguard/
 						dnf remove -y wireguard-tools
+						rm -rf /etc/wireguard/
 					fi
 				else
 					{ crontab -l 2>/dev/null | grep -v '/usr/local/sbin/boringtun-upgrade' ; } | crontab -
 					if [[ "$os" == "ubuntu" ]]; then
 						# Ubuntu
+						rm -rf /etc/wireguard/
+						apt-get remove --purge -y wireguard-tools
+					elif [[ "$os" == "debian" && "$os_version" -ge 11 ]]; then
+						# Debian 11 or higher
 						rm -rf /etc/wireguard/
 						apt-get remove --purge -y wireguard-tools
 					elif [[ "$os" == "debian" && "$os_version" -eq 10 ]]; then
@@ -643,16 +668,16 @@ else
 						apt-get remove --purge -y wireguard-tools
 					elif [[ "$os" == "centos" && "$os_version" -eq 8 ]]; then
 						# CentOS 8
-						rm -rf /etc/wireguard/
 						dnf remove -y wireguard-tools
+						rm -rf /etc/wireguard/
 					elif [[ "$os" == "centos" && "$os_version" -eq 7 ]]; then
 						# CentOS 7
-						rm -rf /etc/wireguard/
 						yum remove -y wireguard-tools
+						rm -rf /etc/wireguard/
 					elif [[ "$os" == "fedora" ]]; then
 						# Fedora
-						rm -rf /etc/wireguard/
 						dnf remove -y wireguard-tools
+						rm -rf /etc/wireguard/
 					fi
 					rm -f /usr/local/sbin/boringtun /usr/local/sbin/boringtun-upgrade
 				fi
