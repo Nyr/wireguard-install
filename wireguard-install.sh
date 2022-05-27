@@ -22,7 +22,10 @@ fi
 
 # Detect OS
 # $os_version variables aren't always in use, but are kept here for convenience
-if grep -qs "ubuntu" /etc/os-release; then
+if [[ -e /etc/linuxmint/info ]]; then
+	os="linuxmint"
+	os_version=$(grep 'RELEASE=' /etc/linuxmint/info | cut -d '=' -f 2 | cut -d '.' -f 1)
+elif grep -qs "ubuntu" /etc/os-release; then
 	os="ubuntu"
 	os_version=$(grep 'VERSION_ID' /etc/os-release | cut -d '"' -f 2 | tr -d '.')
 elif [[ -e /etc/debian_version ]]; then
@@ -36,7 +39,13 @@ elif [[ -e /etc/fedora-release ]]; then
 	os_version=$(grep -oE '[0-9]+' /etc/fedora-release | head -1)
 else
 	echo "This installer seems to be running on an unsupported distribution.
-Supported distros are Ubuntu, Debian, AlmaLinux, Rocky Linux, CentOS and Fedora."
+Supported distros are Ubuntu, Linux Mint, Debian, AlmaLinux, Rocky Linux, CentOS and Fedora."
+	exit
+fi
+
+if [[ "$os" == "linuxmint" && "$os_version" -lt 19 ]]; then
+	echo "Linux Mint 19 or higher is required to use this installer.
+This version of Linux Mint is too old and unsupported."
 	exit
 fi
 
@@ -262,7 +271,7 @@ if [[ ! -e /etc/wireguard/wg0.conf ]]; then
 		if [[ "$boringtun_updates" =~ ^[yY]$ ]]; then
 			if [[ "$os" == "centos" || "$os" == "fedora" ]]; then
 				cron="cronie"
-			elif [[ "$os" == "debian" || "$os" == "ubuntu" ]]; then
+			elif [[ "$os" == "debian" || "$os" == "ubuntu" || "$os" == "linuxmint" ]]; then
 				cron="cron"
 			fi
 		fi
@@ -276,7 +285,7 @@ if [[ ! -e /etc/wireguard/wg0.conf ]]; then
 			# We don't want to silently enable firewalld, so we give a subtle warning
 			# If the user continues, firewalld will be installed and enabled during setup
 			echo "firewalld, which is required to manage routing tables, will also be installed."
-		elif [[ "$os" == "debian" || "$os" == "ubuntu" ]]; then
+		elif [[ "$os" == "debian" || "$os" == "ubuntu" || "$os" == "linuxmint" ]]; then
 			# iptables is way less invasive than firewalld so no warning is given
 			firewall="iptables"
 		fi
@@ -287,6 +296,10 @@ if [[ ! -e /etc/wireguard/wg0.conf ]]; then
 	if [[ ! "$is_container" -eq 0 ]]; then
 		if [[ "$os" == "ubuntu" ]]; then
 			# Ubuntu
+			apt-get update
+			apt-get install -y wireguard qrencode $firewall
+		elif [[ "$os" == "linuxmint" ]]; then
+			# Linux Mint
 			apt-get update
 			apt-get install -y wireguard qrencode $firewall
 		elif [[ "$os" == "debian" && "$os_version" -ge 11 ]]; then
@@ -332,6 +345,11 @@ if [[ ! -e /etc/wireguard/wg0.conf ]]; then
 		# Install required packages
 		if [[ "$os" == "ubuntu" ]]; then
 			# Ubuntu
+			apt-get update
+			apt-get install -y qrencode ca-certificates $cron $firewall
+			apt-get install -y wireguard-tools --no-install-recommends
+		elif [[ "$os" == "linuxmint" ]]; then
+			# Linux Mint
 			apt-get update
 			apt-get install -y qrencode ca-certificates $cron $firewall
 			apt-get install -y wireguard-tools --no-install-recommends
@@ -502,6 +520,8 @@ EOF
 		echo "Installation was finished, but the WireGuard kernel module could not load."
 		if [[ "$os" == "ubuntu" && "$os_version" -eq 1804 ]]; then
 		echo 'Upgrade the kernel and headers with "apt-get install linux-generic" and restart.'
+		elif [[ "$os" == "linuxmint" && "$os_version" -eq 19 ]]; then
+		echo 'Upgrade the kernel and headers with "apt-get install linux-generic" and restart.'
 		elif [[ "$os" == "debian" && "$os_version" -eq 10 ]]; then
 		echo "Upgrade the kernel with \"apt-get install linux-image-$architecture\" and restart."
 		elif [[ "$os" == "centos" && "$os_version" -le 8 ]]; then
@@ -627,6 +647,10 @@ else
 						# Ubuntu
 						rm -rf /etc/wireguard/
 						apt-get remove --purge -y wireguard wireguard-tools
+					elif [[ "$os" == "linuxmint" ]]; then
+						# Linux Mint
+						rm -rf /etc/wireguard/
+						apt-get remove --purge -y wireguard wireguard-tools
 					elif [[ "$os" == "debian" && "$os_version" -ge 11 ]]; then
 						# Debian 11 or higher
 						rm -rf /etc/wireguard/
@@ -652,6 +676,10 @@ else
 					{ crontab -l 2>/dev/null | grep -v '/usr/local/sbin/boringtun-upgrade' ; } | crontab -
 					if [[ "$os" == "ubuntu" ]]; then
 						# Ubuntu
+						rm -rf /etc/wireguard/
+						apt-get remove --purge -y wireguard-tools
+					elif [[ "$os" == "linuxmint" ]]; then
+						# Linux Mint
 						rm -rf /etc/wireguard/
 						apt-get remove --purge -y wireguard-tools
 					elif [[ "$os" == "debian" && "$os_version" -ge 11 ]]; then
