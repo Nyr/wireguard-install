@@ -311,6 +311,10 @@ if [[ ! -e /etc/wireguard/wg0.conf ]]; then
 			# kernel updates.
 			apt-get install -y linux-headers-"$architecture"
 			apt-get install -y wireguard qrencode $firewall
+		elif [[ "$os" == "centos" && "$os_version" -ge 9 ]]; then
+			# CentOS 9 or higher
+			dnf install -y epel-release
+			dnf install -y wireguard-tools qrencode $firewall
 		elif [[ "$os" == "centos" && "$os_version" -eq 8 ]]; then
 			# CentOS 8
 			dnf install -y epel-release elrepo-release
@@ -348,6 +352,10 @@ if [[ ! -e /etc/wireguard/wg0.conf ]]; then
 			apt-get update
 			apt-get install -y qrencode ca-certificates $cron $firewall
 			apt-get install -y wireguard-tools --no-install-recommends
+		elif [[ "$os" == "centos" && "$os_version" -ge 9 ]]; then
+			# CentOS 9 or higher
+			dnf install -y epel-release
+			dnf install -y wireguard-tools qrencode ca-certificates tar $cron $firewall
 		elif [[ "$os" == "centos" && "$os_version" -eq 8 ]]; then
 			# CentOS 8
 			dnf install -y epel-release
@@ -501,9 +509,9 @@ EOF
 		echo "Warning!"
 		echo "Installation was finished, but the WireGuard kernel module could not load."
 		if [[ "$os" == "ubuntu" && "$os_version" -eq 1804 ]]; then
-		echo 'Upgrade the kernel and headers with "apt-get install linux-generic" and restart.'
+			echo 'Upgrade the kernel and headers with "apt-get install linux-generic" and restart.'
 		elif [[ "$os" == "debian" && "$os_version" -eq 10 ]]; then
-		echo "Upgrade the kernel with \"apt-get install linux-image-$architecture\" and restart."
+			echo "Upgrade the kernel with \"apt-get install linux-image-$architecture\" and restart."
 		elif [[ "$os" == "centos" && "$os_version" -le 8 ]]; then
 			echo "Reboot the system to load the most recent kernel."
 		fi
@@ -635,6 +643,10 @@ else
 						# Debian 10
 						rm -rf /etc/wireguard/
 						apt-get remove --purge -y wireguard wireguard-dkms wireguard-tools
+					elif [[ "$os" == "centos" && "$os_version" -ge 9 ]]; then
+						# CentOS 9 or higher
+						dnf remove -y wireguard-tools
+						rm -rf /etc/wireguard/
 					elif [[ "$os" == "centos" && "$os_version" -eq 8 ]]; then
 						# CentOS 8
 						dnf remove -y kmod-wireguard wireguard-tools
@@ -662,6 +674,10 @@ else
 						# Debian 10
 						rm -rf /etc/wireguard/
 						apt-get remove --purge -y wireguard-tools
+					elif [[ "$os" == "centos" && "$os_version" -ge 9 ]]; then
+						# CentOS 9 or higher
+						dnf remove -y wireguard-tools
+						rm -rf /etc/wireguard/
 					elif [[ "$os" == "centos" && "$os_version" -eq 8 ]]; then
 						# CentOS 8
 						dnf remove -y wireguard-tools
