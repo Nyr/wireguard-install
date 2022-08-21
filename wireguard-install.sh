@@ -110,13 +110,13 @@ new_client_dns () {
 		1|"")
 			# Locate the proper resolv.conf
 			# Needed for systems running systemd-resolved
-			if grep -q '^nameserver 127.0.0.53' "/etc/resolv.conf"; then
-				resolv_conf="/run/systemd/resolve/resolv.conf"
-			else
+			if grep '^nameserver' "/etc/resolv.conf" | grep -qv '127.0.0.53' ; then
 				resolv_conf="/etc/resolv.conf"
+			else
+				resolv_conf="/run/systemd/resolve/resolv.conf"
 			fi
 			# Extract nameservers and provide them in the required format
-			dns=$(grep -v '^#\|^;' "$resolv_conf" | grep '^nameserver' | grep -oE '[0-9]{1,3}(\.[0-9]{1,3}){3}' | xargs | sed -e 's/ /, /g')
+			dns=$(grep -v '^#\|^;' "$resolv_conf" | grep '^nameserver' | grep -v '127.0.0.53' | grep -oE '[0-9]{1,3}(\.[0-9]{1,3}){3}' | xargs | sed -e 's/ /, /g')
 		;;
 		2)
 			dns="8.8.8.8, 8.8.4.4"
@@ -504,7 +504,7 @@ EOF
 	echo -e '\xE2\x86\x91 That is a QR code containing the client configuration.'
 	echo
 	# If the kernel module didn't load, system probably had an outdated kernel
-	# We'll try to help, but will not will not force a kernel upgrade upon the user
+	# We'll try to help, but will not force a kernel upgrade upon the user
 	if [[ ! "$is_container" -eq 0 ]] && ! modprobe -nq wireguard; then
 		echo "Warning!"
 		echo "Installation was finished, but the WireGuard kernel module could not load."
