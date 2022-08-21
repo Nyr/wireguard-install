@@ -34,6 +34,9 @@ elif [[ -e /etc/almalinux-release || -e /etc/rocky-release || -e /etc/centos-rel
 elif [[ -e /etc/fedora-release ]]; then
 	os="fedora"
 	os_version=$(grep -oE '[0-9]+' /etc/fedora-release | head -1)
+elif [[ -e /etc/redhat-release ]]; then
+        os="redhat"
+        os_version=$(grep -oE '[0-9]+' /etc/redhat-release | head -1)
 else
 	echo "This installer seems to be running on an unsupported distribution.
 Supported distros are Ubuntu, Debian, AlmaLinux, Rocky Linux, CentOS and Fedora."
@@ -55,6 +58,17 @@ fi
 if [[ "$os" == "centos" && "$os_version" -lt 7 ]]; then
 	echo "CentOS 7 or higher is required to use this installer.
 This version of CentOS is too old and unsupported."
+	exit
+fi
+
+if [[ "$os" == "RedHat" && "$os_version" -lt 7 ]]; then
+ 	echo "RedHat 7 or higher is required to use this installer.
+ This version of RedHat is too old and unsupported."
+ 	exit
+fi
+
+if [[ "`sudo rpm -ql epel-release`" == "package epel-release is not installed" ]]; then
+ 	echo "EPEL is not installed, please install EPEL"
 	exit
 fi
 
@@ -271,7 +285,7 @@ if [[ ! -e /etc/wireguard/wg0.conf ]]; then
 	echo "WireGuard installation is ready to begin."
 	# Install a firewall if firewalld or iptables are not already available
 	if ! systemctl is-active --quiet firewalld.service && ! hash iptables 2>/dev/null; then
-		if [[ "$os" == "centos" || "$os" == "fedora" ]]; then
+		if [[ "$os" == "centos" || "$os" == "fedora" || "$os" == "redhat" ]]; then
 			firewall="firewalld"
 			# We don't want to silently enable firewalld, so we give a subtle warning
 			# If the user continues, firewalld will be installed and enabled during setup
@@ -322,7 +336,7 @@ if [[ ! -e /etc/wireguard/wg0.conf ]]; then
 			yum install -y yum-plugin-elrepo
 			yum install -y kmod-wireguard wireguard-tools qrencode $firewall
 			mkdir -p /etc/wireguard/
-		elif [[ "$os" == "fedora" ]]; then
+		elif [[ "$os" == "fedora" || "$os" == "redhat" ]]; then
 			# Fedora
 			dnf install -y wireguard-tools qrencode $firewall
 			mkdir -p /etc/wireguard/
@@ -358,7 +372,7 @@ if [[ ! -e /etc/wireguard/wg0.conf ]]; then
 			yum install -y epel-release
 			yum install -y wireguard-tools qrencode ca-certificates tar $cron $firewall
 			mkdir -p /etc/wireguard/
-		elif [[ "$os" == "fedora" ]]; then
+		elif [[ "$os" == "fedora" || "$os" == "redhat" ]]; then
 			# Fedora
 			dnf install -y wireguard-tools qrencode ca-certificates tar $cron $firewall
 			mkdir -p /etc/wireguard/
@@ -643,7 +657,7 @@ else
 						# CentOS 7
 						yum remove -y kmod-wireguard wireguard-tools
 						rm -rf /etc/wireguard/
-					elif [[ "$os" == "fedora" ]]; then
+					elif [[ "$os" == "fedora" || "$os" == "redhat" ]]; then
 						# Fedora
 						dnf remove -y wireguard-tools
 						rm -rf /etc/wireguard/
@@ -670,7 +684,7 @@ else
 						# CentOS 7
 						yum remove -y wireguard-tools
 						rm -rf /etc/wireguard/
-					elif [[ "$os" == "fedora" ]]; then
+					elif [[ "$os" == "fedora" || "$os" == "redhat" ]]; then
 						# Fedora
 						dnf remove -y wireguard-tools
 						rm -rf /etc/wireguard/
