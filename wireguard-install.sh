@@ -146,6 +146,7 @@ new_network () {
 		echo "   2) 10.0.7"
 		echo "   3) 172.16.7"
 		echo "   4) 192.168.7"
+		echo "   5) Custom network"
 		read -p "Network [1]: " network
 		until [[ -z "$network" || "$network" =~ ^[1-6]$ ]]; do
 			echo "$network: invalid selection."
@@ -164,6 +165,14 @@ new_network () {
 			;;
 			4)
 				network="192.168.7"
+			;;
+			5)
+				# Read from the command line, check the format is valid before exiting loop.
+				while [[ 1 ]]; do
+					read -p "Enter custom network prefix (e.g. '192.168.1'): " network
+					[[ "$network" =~ ^([0-9]{1,3}[\.]){2}[0-9]{1,3}$ ]] && break
+					echo "Network '$network' invalid format."
+				done
 			;;
 		esac
 	fi
