@@ -100,8 +100,9 @@ new_client_dns () {
 	echo "   4) OpenDNS"
 	echo "   5) Quad9"
 	echo "   6) AdGuard"
+	echo "   7) Custom resolvers"
 	read -p "DNS server [1]: " dns
-	until [[ -z "$dns" || "$dns" =~ ^[1-6]$ ]]; do
+	until [[ -z "$dns" || "$dns" =~ ^[1-7]$ ]]; do
 		echo "$dns: invalid selection."
 		read -p "DNS server [1]: " dns
 	done
@@ -133,6 +134,14 @@ new_client_dns () {
 		6)
 			dns="94.140.14.14, 94.140.15.15"
 		;;
+		7)
+			# Read from the command line, check the format is valid before exiting loop.
+			while [[ 1 ]]; do
+			  read -p "Enter custom dns resolvers (e.g. '1.1.1.1, 1.0.0.1'): " dns
+			  [[ "$dns" =~ ^([0-9]{1,3}[\.]){3}[0-9]{1,3}\,\ ([0-9]{1,3}[\.]){3}[0-9]{1,3}$ ]] && break
+			  echo "dns '$dns' incompatible format."
+			done
+		;;
 	esac
 }
 
@@ -148,7 +157,7 @@ new_network () {
 		echo "   4) 192.168.7"
 		echo "   5) Custom network"
 		read -p "Network [1]: " network
-		until [[ -z "$network" || "$network" =~ ^[1-6]$ ]]; do
+		until [[ -z "$network" || "$network" =~ ^[1-5]$ ]]; do
 			echo "$network: invalid selection."
 			read -p "network server [1]: " network
 		done
@@ -171,7 +180,7 @@ new_network () {
 				while [[ 1 ]]; do
 					read -p "Enter custom network prefix (e.g. '192.168.1'): " network
 					[[ "$network" =~ ^([0-9]{1,3}[\.]){2}[0-9]{1,3}$ ]] && break
-					echo "Network '$network' invalid format."
+					echo "Network '$network' incompatible format."
 				done
 			;;
 		esac
