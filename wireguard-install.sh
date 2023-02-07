@@ -612,6 +612,8 @@ else
 			echo -e '\xE2\x86\x91 That is a QR code containing your client configuration.'
 			echo
 			echo "$client added. Configuration available in:" ~/"$client.conf"
+			echo
+			cat ~/"$client.conf"
 			exit
 		;;
 		2)
