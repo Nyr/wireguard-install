@@ -93,14 +93,24 @@ TUN needs to be enabled before running this installer."
 fi
 
 new_client_dns () {
-	echo "Select a DNS server for the client:"
-	echo "   1) Current system resolvers"
-	echo "   2) Google"
-	echo "   3) 1.1.1.1"
-	echo "   4) OpenDNS"
-	echo "   5) Quad9"
-	echo "   6) AdGuard"
-	echo "   7) Custom resolvers"
+	# Locate the proper resolv.conf
+	# Needed for systems running systemd-resolved
+	if grep '^nameserver' "/etc/resolv.conf" | grep -qv '127.0.0.53' ; then
+		resolv_conf="/etc/resolv.conf"
+	else
+		resolv_conf="/run/systemd/resolve/resolv.conf"
+	fi
+	# Extract nameservers and provide them in the required format
+	system_dns=$(grep -v '^#\|^;' "$resolv_conf" | grep '^nameserver' | grep -v '127.0.0.53' | grep -oE '[0-9]{1,3}(\.[0-9]{1,3}){3}' | xargs | sed -e 's/ /, /g')
+
+  echo "Select a DNS server for the client:"
+  echo "   1) Current system resolvers        | $system_dns"
+  echo "   2) 8.8.8.8, 8.8.4.4                | Google"
+  echo "   3) 1.1.1.1, 1.0.0.1                | WARP "
+  echo "   4) 208.67.222.222, 208.67.220.220  | OpenDNS"
+  echo "   5) 9.9.9.9, 149.112.112.112        | Quad9"
+  echo "   6) 94.140.14.14, 94.140.15.15      | AdGuard"
+  echo "   7) Enter custom resolvers"
 	read -p "DNS server [1]: " dns
 	until [[ -z "$dns" || "$dns" =~ ^[1-7]$ ]]; do
 		echo "$dns: invalid selection."
@@ -109,15 +119,7 @@ new_client_dns () {
 		# DNS
 	case "$dns" in
 		1|"")
-			# Locate the proper resolv.conf
-			# Needed for systems running systemd-resolved
-			if grep '^nameserver' "/etc/resolv.conf" | grep -qv '127.0.0.53' ; then
-				resolv_conf="/etc/resolv.conf"
-			else
-				resolv_conf="/run/systemd/resolve/resolv.conf"
-			fi
-			# Extract nameservers and provide them in the required format
-			dns=$(grep -v '^#\|^;' "$resolv_conf" | grep '^nameserver' | grep -v '127.0.0.53' | grep -oE '[0-9]{1,3}(\.[0-9]{1,3}){3}' | xargs | sed -e 's/ /, /g')
+			dns=$system_dns
 		;;
 		2)
 			dns="8.8.8.8, 8.8.4.4"
@@ -137,9 +139,9 @@ new_client_dns () {
 		7)
 			# Read from the command line, check the format is valid before exiting loop.
 			while [[ 1 ]]; do
-			  read -p "Enter custom dns resolvers (e.g. '1.1.1.1, 1.0.0.1'): " dns
-			  [[ "$dns" =~ ^([0-9]{1,3}[\.]){3}[0-9]{1,3}\,\ ([0-9]{1,3}[\.]){3}[0-9]{1,3}$ ]] && break
-			  echo "dns '$dns' incompatible format."
+				read -p "Enter custom dns resolvers (e.g. '1.1.1.1, 1.0.0.1'): " dns
+				[[ "$dns" =~ ^((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$ ]] && break
+				echo "dns '$dns' invalid."
 			done
 		;;
 	esac
@@ -177,11 +179,11 @@ new_network () {
 			;;
 			5)
 				# Read from the command line, check the format is valid before exiting loop.
-				while [[ 1 ]]; do
-					read -p "Enter custom network prefix (e.g. '192.168.1'): " network
-					[[ "$network" =~ ^([0-9]{1,3}[\.]){2}[0-9]{1,3}$ ]] && break
-					echo "Network '$network' incompatible format."
-				done
+			while [[ 1 ]]; do
+				read -p "Enter custom network prefix (e.g. '192.168.1'): " network
+				[[ "$network" =~ ^([0-9]{1,3}[\.]){2}[0-9]{1,3}$ ]] && break
+				echo "Network '$network' invalid. Note: only 3 subnets, not 4! (e.g. a.b.c)"
+			done
 			;;
 		esac
 	fi
