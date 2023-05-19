@@ -449,7 +449,7 @@ ExecStop=$iptables_path -w -D INPUT -p udp --dport $port -j ACCEPT
 ExecStop=$iptables_path -w -D FORWARD -s 10.7.0.0/24 -j ACCEPT
 ExecStop=$iptables_path -w -D FORWARD -m state --state RELATED,ESTABLISHED -j ACCEPT" > /etc/systemd/system/wg-iptables.service
 		if [[ -n "$ip6" ]]; then
-			echo "ExecStart=$ip6tables_path -t nat -A POSTROUTING -s fddd:2c4:2c4:2c4::/64 ! -d fddd:2c4:2c4:2c4::/64 -j SNAT --to $ip6
+			echo "ExecStart=$ip6tables_path -w -t nat -A POSTROUTING -s fddd:2c4:2c4:2c4::/64 ! -d fddd:2c4:2c4:2c4::/64 -j SNAT --to $ip6
 ExecStart=$ip6tables_path -w -I FORWARD -s fddd:2c4:2c4:2c4::/64 -j ACCEPT
 ExecStart=$ip6tables_path -w -I FORWARD -m state --state RELATED,ESTABLISHED -j ACCEPT
 ExecStop=$ip6tables_path -w -t nat -D POSTROUTING -s fddd:2c4:2c4:2c4::/64 ! -d fddd:2c4:2c4:2c4::/64 -j SNAT --to $ip6
