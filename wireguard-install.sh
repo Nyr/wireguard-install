@@ -242,6 +242,8 @@ if [[ ! -e /etc/wireguard/wg0.conf ]]; then
 	done
 	[[ -z "$port" ]] && port="51820"
 	echo
+ 	echo "Allowed Characters are 0-9 a-z A-Z _ - all other Characters will be removed without asking!"
+  	echo "If you use a Linux Client, please use max. 15 Characters or you have to manually shorten the config File name afterwards."
 	echo "Enter a name for the first client:"
 	read -p "Name [client]: " unsanitized_client
 	# Allow a limited set of characters to avoid conflicts
@@ -538,6 +540,8 @@ else
 	case "$option" in
 		1)
 			echo
+		 	echo "Allowed Characters are 0-9 a-z A-Z _ - all other Characters will be removed without asking!"
+  			echo "If you use a Linux Client, please use max. 15 Characters or you have to manually shorten the config File name afterwards."
 			echo "Provide a name for the client:"
 			read -p "Name: " unsanitized_client
 			# Allow a limited set of characters to avoid conflicts
