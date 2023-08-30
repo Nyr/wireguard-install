@@ -377,7 +377,7 @@ if [[ ! -e /etc/wireguard/wg0.conf ]]; then
 			# Fedora
 			dnf install -y wireguard-tools qrencode ca-certificates tar $cron $firewall
 			mkdir -p /etc/wireguard/
-		elif [[ "$os" == "fedora" ]]; then
+		elif [[ "$os" == "arch" ]]; then
 			# Arch
 			pacman -Sy
 			pacman -S --needed --noconfirm wireguard-tools qrencode ca-certificates $cron $firewall
