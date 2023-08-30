@@ -34,6 +34,8 @@ elif [[ -e /etc/almalinux-release || -e /etc/rocky-release || -e /etc/centos-rel
 elif [[ -e /etc/fedora-release ]]; then
 	os="fedora"
 	os_version=$(grep -oE '[0-9]+' /etc/fedora-release | head -1)
+elif [[ -e /etc/arch-release ]]; then
+	os="arch"
 else
 	echo "This installer seems to be running on an unsupported distribution.
 Supported distros are Ubuntu, Debian, AlmaLinux, Rocky Linux, CentOS and Fedora."
@@ -271,7 +273,7 @@ if [[ ! -e /etc/wireguard/wg0.conf ]]; then
 	echo "WireGuard installation is ready to begin."
 	# Install a firewall if firewalld or iptables are not already available
 	if ! systemctl is-active --quiet firewalld.service && ! hash iptables 2>/dev/null; then
-		if [[ "$os" == "centos" || "$os" == "fedora" ]]; then
+		if [[ "$os" == "centos" || "$os" == "fedora" || "$os" == "arch" ]]; then
 			firewall="firewalld"
 			# We don't want to silently enable firewalld, so we give a subtle warning
 			# If the user continues, firewalld will be installed and enabled during setup
@@ -330,6 +332,11 @@ if [[ ! -e /etc/wireguard/wg0.conf ]]; then
 			# Fedora
 			dnf install -y wireguard-tools qrencode $firewall
 			mkdir -p /etc/wireguard/
+		elif [[ "$os" == "arch" ]]; then
+			# Arch
+			pacman -Sy
+			pacman -S --needed --noconfirm wireguard-tools qrencode $firewall
+			mkdir -p /etc/wireguard/
 		fi
 	# Else, we are inside a container and BoringTun needs to be used
 	else
@@ -370,6 +377,11 @@ if [[ ! -e /etc/wireguard/wg0.conf ]]; then
 			# Fedora
 			dnf install -y wireguard-tools qrencode ca-certificates tar $cron $firewall
 			mkdir -p /etc/wireguard/
+		elif [[ "$os" == "fedora" ]]; then
+			# Arch
+			pacman -Sy
+			pacman -S --needed --noconfirm wireguard-tools qrencode ca-certificates $cron $firewall
+			mkdir -p /etc/wireguard/
 		fi
 		# Grab the BoringTun binary using wget or curl and extract into the right place.
 		# Don't use this service elsewhere without permission! Contact me before you do!
@@ -379,7 +391,7 @@ if [[ ! -e /etc/wireguard/wg0.conf ]]; then
 		echo "[Service]
 Environment=WG_QUICK_USERSPACE_IMPLEMENTATION=boringtun
 Environment=WG_SUDO=1" > /etc/systemd/system/wg-quick@wg0.service.d/boringtun.conf
-		if [[ -n "$cron" ]] && [[ "$os" == "centos" || "$os" == "fedora" ]]; then
+		if [[ -n "$cron" ]] && [[ "$os" == "centos" || "$os" == "fedora" || "$os" == "arch" ]]; then
 			systemctl enable --now crond.service
 		fi
 	fi
@@ -659,6 +671,10 @@ else
 						# Fedora
 						dnf remove -y wireguard-tools
 						rm -rf /etc/wireguard/
+					elif [[ "$os" == "arch" ]]; then
+						# Arch
+						rm -rf /etc/wireguard/
+						pacman -Rcs --noconfirm wireguard-tools
 					fi
 				else
 					{ crontab -l 2>/dev/null | grep -v '/usr/local/sbin/boringtun-upgrade' ; } | crontab -
@@ -690,6 +706,10 @@ else
 						# Fedora
 						dnf remove -y wireguard-tools
 						rm -rf /etc/wireguard/
+					elif [[ "$os" == "arch" ]]; then
+						# Arch
+						rm -rf /etc/wireguard/
+						pacman -Rcs --noconfirm wireguard-tools
 					fi
 					rm -f /usr/local/sbin/boringtun /usr/local/sbin/boringtun-upgrade
 				fi
