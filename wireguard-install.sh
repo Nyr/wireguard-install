@@ -28,6 +28,9 @@ if grep -qs "ubuntu" /etc/os-release; then
 elif [[ -e /etc/debian_version ]]; then
 	os="debian"
 	os_version=$(grep -oE '[0-9]+' /etc/debian_version | head -1)
+elif [[ -e /etc/alpine-release ]]; then
+	os="alpine"
+	os_version=$(grep -oE '[0-9]+' /etc/alpine-release | head -1)
 elif [[ -e /etc/almalinux-release || -e /etc/rocky-release || -e /etc/centos-release ]]; then
 	os="centos"
 	os_version=$(grep -shoE '[0-9]+' /etc/almalinux-release /etc/rocky-release /etc/centos-release | head -1)
@@ -36,7 +39,7 @@ elif [[ -e /etc/fedora-release ]]; then
 	os_version=$(grep -oE '[0-9]+' /etc/fedora-release | head -1)
 else
 	echo "This installer seems to be running on an unsupported distribution.
-Supported distros are Ubuntu, Debian, AlmaLinux, Rocky Linux, CentOS and Fedora."
+Supported distros are Ubuntu, Debian, AlmaLinux, Rocky Linux, CentOS, Alpine and Fedora."
 	exit
 fi
 
@@ -65,10 +68,10 @@ This version of CentOS is too old and unsupported."
 fi
 
 # Detect environments where $PATH does not include the sbin directories
-if ! grep -q sbin <<< "$PATH"; then
-	echo '$PATH does not include sbin. Try using "su -" instead of "su".'
-	exit
-fi
+# if ! grep -q sbin <<< "$PATH"; then
+# 	echo '$PATH does not include sbin. Try using "su -" instead of "su".'
+# 	exit
+# fi
 
 systemd-detect-virt -cq
 is_container="$?"
@@ -212,7 +215,7 @@ if [[ ! -e /etc/wireguard/wg0.conf ]]; then
 		echo
 		echo "This server is behind NAT. What is the public IPv4 address or hostname?"
 		# Get public IP and sanitize with grep
-		get_public_ip=$(grep -m 1 -oE '^[0-9]{1,3}(\.[0-9]{1,3}){3}$' <<< "$(wget -T 10 -t 1 -4qO- "http://ip1.dynupdate.no-ip.com/" || curl -m 10 -4Ls "http://ip1.dynupdate.no-ip.com/")")
+		get_public_ip=$(grep -m 1 -oE '^[0-9]{1,3}(\.[0-9]{1,3}){3}$' <<< "$(wget -T 10 -t 1 -qO- "http://ip1.dynupdate.no-ip.com/" || curl -m 10 -4Ls "http://ip1.dynupdate.no-ip.com/")")
 		read -p "Public IPv4 address / hostname [$get_public_ip]: " public_ip
 		# If the checkip service is unavailable and user didn't provide input, ask again
 		until [[ -n "$get_public_ip" || -n "$public_ip" ]]; do
@@ -266,9 +269,9 @@ if [[ ! -e /etc/wireguard/wg0.conf ]]; then
 		done
 		[[ -z "$boringtun_updates" ]] && boringtun_updates="y"
 		if [[ "$boringtun_updates" =~ ^[yY]$ ]]; then
-			if [[ "$os" == "centos" || "$os" == "fedora" ]]; then
+			if [[ "$os" == "centos" || "$os" == "fedora" || "$os" == "alpine" ]]; then
 				cron="cronie"
-			elif [[ "$os" == "debian" || "$os" == "ubuntu" ]]; then
+			elif [[ "$os" == "alpine" || "$os" == "debian" || "$os" == "ubuntu" ]]; then
 				cron="cron"
 			fi
 		fi
@@ -276,7 +279,12 @@ if [[ ! -e /etc/wireguard/wg0.conf ]]; then
 	echo
 	echo "WireGuard installation is ready to begin."
 	# Install a firewall if firewalld or iptables are not already available
-	if ! systemctl is-active --quiet firewalld.service && ! hash iptables 2>/dev/null; then
+	if [[ "$os" == "alpine" ]]; then
+		if ! rc-service awall; then
+			firewall="awall" 
+			echo "awall, which is required to manage routing tables, will also be installed."
+		fi
+	elif ! systemctl is-active --quiet firewalld.service && ! hash iptables 2>/dev/null; then
 		if [[ "$os" == "centos" || "$os" == "fedora" ]]; then
 			firewall="firewalld"
 			# We don't want to silently enable firewalld, so we give a subtle warning
@@ -291,7 +299,13 @@ if [[ ! -e /etc/wireguard/wg0.conf ]]; then
 	# Install WireGuard
 	# If not running inside a container, set up the WireGuard kernel module
 	if [[ ! "$is_container" -eq 0 ]]; then
-		if [[ "$os" == "ubuntu" ]]; then
+		if [[ "$os" == "alpine" ]]; then
+			# Alpine
+			echo "FEW PACKS REQUIRE COMMUNITY REPO"
+			apk update
+			apk add -u ip6tables iptables
+			apk add -u wireguard-tools awall libqrencode wireguard-tools-wg-quick
+		elif [[ "$os" == "ubuntu" ]]; then
 			# Ubuntu
 			apt-get update
 			apt-get install -y wireguard qrencode $firewall
@@ -340,7 +354,12 @@ if [[ ! -e /etc/wireguard/wg0.conf ]]; then
 	# Else, we are inside a container and BoringTun needs to be used
 	else
 		# Install required packages
-		if [[ "$os" == "ubuntu" ]]; then
+		if [[ "$os" == "alpine" ]]; then
+			# Alpine
+			apk update
+			apk add ca-certificates $cron awall libqrencode wireguard-tools-wg-quick
+			apk add wireguard-tools --no-install-recommends
+		elif [[ "$os" == "ubuntu" ]]; then
 			# Ubuntu
 			apt-get update
 			apt-get install -y qrencode ca-certificates $cron $firewall
@@ -393,6 +412,16 @@ Environment=WG_SUDO=1" > /etc/systemd/system/wg-quick@wg0.service.d/boringtun.co
 	if [[ "$firewall" == "firewalld" ]]; then
 		systemctl enable --now firewalld.service
 	fi
+	# If awall was just installed, enable it
+
+	if [[ "$firewall" == "awall" ]]; then
+		modprobe -vq ip_tables # IPv4
+		modprobe -vq ip6_tables # if IPv6 is used
+		modprobe -vq iptable_nat # if NAT is used aka router
+
+		rc-update add iptables
+		rc-update add ip6tables
+	fi
 	# Generate wg0.conf
 	cat << EOF > /etc/wireguard/wg0.conf
 # Do not alter the commented lines
@@ -403,6 +432,8 @@ Environment=WG_SUDO=1" > /etc/systemd/system/wg-quick@wg0.service.d/boringtun.co
 Address = 10.7.0.1/24$([[ -n "$ip6" ]] && echo ", fddd:2c4:2c4:2c4::1/64")
 PrivateKey = $(wg genkey)
 ListenPort = $port
+PostUp = $(iptables -A FORWARD -i %i -j ACCEPT; iptables -t nat -A POSTROUTING -o eth0 -j MASQUERADE;iptables -A FORWARD -o %i -j ACCEPT)
+PostDown = $(iptables -D FORWARD -i %i -j ACCEPT; iptables -t nat -D POSTROUTING -o eth0 -j MASQUERADE;iptables -D FORWARD -o %i -j ACCEPT)
 
 EOF
 	chmod 600 /etc/wireguard/wg0.conf
@@ -416,7 +447,186 @@ EOF
 		# Enable without waiting for a reboot or service restart
 		echo 1 > /proc/sys/net/ipv6/conf/all/forwarding
 	fi
-	if systemctl is-active --quiet firewalld.service; then
+	if [[ "$os" == "alpine" ]]; then
+	wg-quick up wg0
+
+		cat << EOF > /etc/awall/private/custom-services.json
+{
+    "service": {
+        "wireguard": [
+            { "proto": "udp", "port": $port }
+        ],
+        "squid": [
+            { "proto": "tcp", "port": 3128 }
+        ]
+    }
+}
+EOF
+
+		cat << EOF > /etc/awall/optional/cloud-server.json
+{
+  "description": "Default awall policy to protect Cloud server",
+  "import": "custom-services",
+  "variable": { "internet_if": "eth+"},
+  "zone": {
+    "internet": { "iface": "\$internet_if" },
+    "vpn": { "iface": "wg0" }
+  },
+  "policy": [
+    { "in": "internet", "action": "drop" },
+    { "in": "vpn", "out": "internet", "action": "accept" },
+    { "out": "vpn", "in": "internet", "action": "accept" },
+    { "action": "reject" }
+  ],
+  "snat": [ { "out": "internet", "src": "10.7.0.0/24" } ]
+}
+EOF
+
+		cat << EOF > /etc/awall/optional/ssh.json
+{
+    "description": "Allow incoming SSH access (TCP/22)",
+
+    "filter": [
+        {
+            "in": "internet",
+            "out": "_fw",
+            "service": "ssh",
+            "action": "accept",
+            "src": "0.0.0.0/0",
+            "conn-limit": { "count": 3, "interval": 60 }
+        }
+    ]
+}
+EOF
+
+		cat << EOF > /etc/awall/optional/ping.json
+{
+
+    "description": "Allow ping-pong",
+
+    "filter": [
+        {
+              "in": "internet",
+              "service": "ping",
+              "action": "accept",
+              "flow-limit": { "count": 10, "interval": 6 }
+        }
+    ]
+}
+EOF
+
+		cat << EOF > /etc/awall/optional/webserver.json
+{
+    "description": "Allow incoming Apache (TCP 80 & 443) ports",
+    "filter": [
+        {
+            "in": "internet",
+            "out": "_fw",
+            "service": [ "http", "https"],
+            "action": "accept"
+        }
+    ]
+}
+EOF
+
+		cat << EOF > /etc/awall/optional/outgoing.json
+{
+    "description": "Allow outgoing connections for http/https, dns, ssh, ntp, ssh and ping",
+
+    "filter": [
+        {
+            "in": "_fw",
+            "out": "internet",
+            "service": [ "http", "https", "dns", "ssh", "ntp", "ping" ],
+            "action": "accept"
+        }
+    ]
+}
+EOF
+
+		cat << EOF > /etc/awall/optional/wireguard.json
+{
+    "description": "Allow incoming WireGuard UDP port $port",
+    "filter": [
+        {
+            "in": "internet",
+            "out": "_fw",
+            "service": "wireguard",
+            "action": "accept"
+        }
+    ]
+}
+EOF
+
+		cat << EOF > /etc/awall/optional/vpntraffic.json
+{
+    "description": "Allow VPN traffic for selected ports",
+    "filter": [
+        {
+            "in": "vpn",
+            "out": "_fw",
+            "service": [ "ssh", "dns", "squid", "ping" ],
+            "action": "accept",
+	    "src": "10.7.0.0/24"
+        }
+    ]
+}
+EOF
+	
+		awall enable cloud-server
+		awall enable ssh
+		awall enable ping
+		awall enable webserver
+		awall enable outgoing
+		awall enable wireguard
+		awall enable vpntraffic
+		awall activate
+		awall list
+
+		## VERIFY that port opened ##
+		iptables -S | grep "$port"
+		ip6tables -S | grep "$port"
+		sed -i "s/\(IPFORWARD *= *\).*/\1\"yes\"/" /etc/conf.d/iptables
+		rc-service iptables restart
+		rc-service ip6tables restart
+
+		if [[ $(sysctl net.ipv4.ip_forward) == "net.ipv4.ip_forward = 1" ]]; then
+			echo "Alpine Linux is now acting as a router"
+		fi
+# Create a service to set up persistent iptables rules
+		iptables_path=$(command -v iptables)
+		ip6tables_path=$(command -v ip6tables)
+		# nf_tables is not available as standard in OVZ kernels. So use iptables-legacy
+		# if we are in OVZ, with a nf_tables backend and iptables-legacy is available.
+		if [[ $(systemd-detect-virt) == "openvz" ]] && readlink -f "$(command -v iptables)" | grep -q "nft" && hash iptables-legacy 2>/dev/null; then
+			iptables_path=$(command -v iptables-legacy)
+			ip6tables_path=$(command -v ip6tables-legacy)
+		fi
+		echo "[Unit]
+Before=network.target
+[Service]
+Type=oneshot
+ExecStart=$iptables_path -t nat -A POSTROUTING -s 10.7.0.0/24 ! -d 10.7.0.0/24 -j SNAT --to $ip
+ExecStart=$iptables_path -I INPUT -p udp --dport $port -j ACCEPT
+ExecStart=$iptables_path -I FORWARD -s 10.7.0.0/24 -j ACCEPT
+ExecStart=$iptables_path -I FORWARD -m state --state RELATED,ESTABLISHED -j ACCEPT
+ExecStop=$iptables_path -t nat -D POSTROUTING -s 10.7.0.0/24 ! -d 10.7.0.0/24 -j SNAT --to $ip
+ExecStop=$iptables_path -D INPUT -p udp --dport $port -j ACCEPT
+ExecStop=$iptables_path -D FORWARD -s 10.7.0.0/24 -j ACCEPT
+ExecStop=$iptables_path -D FORWARD -m state --state RELATED,ESTABLISHED -j ACCEPT" > /etc/systemd/system/wg-iptables.service
+		if [[ -n "$ip6" ]]; then
+			echo "ExecStart=$ip6tables_path -t nat -A POSTROUTING -s fddd:2c4:2c4:2c4::/64 ! -d fddd:2c4:2c4:2c4::/64 -j SNAT --to $ip6
+ExecStart=$ip6tables_path -I FORWARD -s fddd:2c4:2c4:2c4::/64 -j ACCEPT
+ExecStart=$ip6tables_path -I FORWARD -m state --state RELATED,ESTABLISHED -j ACCEPT
+ExecStop=$ip6tables_path -t nat -D POSTROUTING -s fddd:2c4:2c4:2c4::/64 ! -d fddd:2c4:2c4:2c4::/64 -j SNAT --to $ip6
+ExecStop=$ip6tables_path -D FORWARD -s fddd:2c4:2c4:2c4::/64 -j ACCEPT
+ExecStop=$ip6tables_path -D FORWARD -m state --state RELATED,ESTABLISHED -j ACCEPT" >> /etc/systemd/system/wg-iptables.service
+		fi
+		echo "RemainAfterExit=yes
+[Install]
+WantedBy=multi-user.target" >> /etc/systemd/system/wg-iptables.service
+		systemctl enable --now wg-iptables.service
+	elif systemctl is-active --quiet firewalld.service; then
 		# Using both permanent and not permanent rules to avoid a firewalld
 		# reload.
 		firewall-cmd --add-port="$port"/udp
@@ -470,7 +680,9 @@ WantedBy=multi-user.target" >> /etc/systemd/system/wg-iptables.service
 	# Generates the custom client.conf
 	new_client_setup
 	# Enable and start the wg-quick service
-	systemctl enable --now wg-quick@wg0.service
+	if [[ ! "$os" == "alpine" ]]; then
+		systemctl enable --now wg-quick@wg0.service
+	fi
 	# Set up automatic updates for BoringTun if the user wanted to
 	if [[ "$boringtun_updates" =~ ^[yY]$ ]]; then
 		# Deploy upgrade script
@@ -511,7 +723,7 @@ EOF
 	echo
 	# If the kernel module didn't load, system probably had an outdated kernel
 	# We'll try to help, but will not force a kernel upgrade upon the user
-	if [[ ! "$is_container" -eq 0 ]] && ! modprobe -nq wireguard; then
+	if [[ ! "$is_container" -eq 0 ]] && ! modprobe -vq wireguard; then
 		echo "Warning!"
 		echo "Installation was finished, but the WireGuard kernel module could not load."
 		if [[ "$os" == "ubuntu" && "$os_version" -eq 1804 ]]; then
@@ -612,7 +824,10 @@ else
 			done
 			if [[ "$remove" =~ ^[yY]$ ]]; then
 				port=$(grep '^ListenPort' /etc/wireguard/wg0.conf | cut -d " " -f 3)
-				if systemctl is-active --quiet firewalld.service; then
+				if [[ "$os" == "alpine" ]]; then
+					rc-service iptables stop
+					rc-service ip6tables stop
+				elif systemctl is-active --quiet firewalld.service; then
 					ip=$(firewall-cmd --direct --get-rules ipv4 nat POSTROUTING | grep '\-s 10.7.0.0/24 '"'"'!'"'"' -d 10.7.0.0/24' | grep -oE '[^ ]+$')
 					# Using both permanent and not permanent rules to avoid a firewalld reload.
 					firewall-cmd --remove-port="$port"/udp
@@ -632,12 +847,18 @@ else
 					systemctl disable --now wg-iptables.service
 					rm -f /etc/systemd/system/wg-iptables.service
 				fi
-				systemctl disable --now wg-quick@wg0.service
+				if [[ ! "$os" == "alpine" ]]; then
+					systemctl disable --now wg-quick@wg0.service
+				fi
 				rm -f /etc/systemd/system/wg-quick@wg0.service.d/boringtun.conf
 				rm -f /etc/sysctl.d/99-wireguard-forward.conf
 				# Different packages were installed if the system was containerized or not
 				if [[ ! "$is_container" -eq 0 ]]; then
-					if [[ "$os" == "ubuntu" ]]; then
+					if [[ "$os" == "alpine" ]]; then
+						# Alpine
+						rm -rf /etc/wireguard/
+						apk del --purge wireguard-tools
+					elif [[ "$os" == "ubuntu" ]]; then
 						# Ubuntu
 						rm -rf /etc/wireguard/
 						apt-get remove --purge -y wireguard wireguard-tools
@@ -668,7 +889,11 @@ else
 					fi
 				else
 					{ crontab -l 2>/dev/null | grep -v '/usr/local/sbin/boringtun-upgrade' ; } | crontab -
-					if [[ "$os" == "ubuntu" ]]; then
+					if [[ "$os" == "alpine" ]]; then
+						# Alpine
+						rm -rf /etc/wireguard/
+						apk del --purge -y wireguard-tools
+					elif [[ "$os" == "ubuntu" ]]; then
 						# Ubuntu
 						rm -rf /etc/wireguard/
 						apt-get remove --purge -y wireguard-tools
