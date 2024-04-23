@@ -14,12 +14,6 @@ fi
 # Discard stdin. Needed when running from an one-liner which includes a newline
 read -N 999999 -t 0.001
 
-# Detect OpenVZ 6
-if [[ $(uname -r | cut -d "." -f 1) -eq 2 ]]; then
-	echo "The system is running an old kernel, which is incompatible with this installer."
-	exit
-fi
-
 # Detect OS
 # $os_version variables aren't always in use, but are kept here for convenience
 if grep -qs "ubuntu" /etc/os-release; then
@@ -40,8 +34,8 @@ Supported distros are Ubuntu, Debian, AlmaLinux, Rocky Linux, CentOS and Fedora.
 	exit
 fi
 
-if [[ "$os" == "ubuntu" && "$os_version" -lt 1804 ]]; then
-	echo "Ubuntu 18.04 or higher is required to use this installer.
+if [[ "$os" == "ubuntu" && "$os_version" -lt 2204 ]]; then
+	echo "Ubuntu 22.04 or higher is required to use this installer.
 This version of Ubuntu is too old and unsupported."
 	exit
 fi
@@ -51,15 +45,15 @@ if [[ "$os" == "debian" ]]; then
 		echo "Debian Testing and Debian Unstable are unsupported by this installer."
 		exit
 	fi
-	if [[ "$os_version" -lt 10 ]]; then
-		echo "Debian 10 or higher is required to use this installer.
+	if [[ "$os_version" -lt 11 ]]; then
+		echo "Debian 11 or higher is required to use this installer.
 This version of Debian is too old and unsupported."
 		exit
 	fi
 fi
 
-if [[ "$os" == "centos" && "$os_version" -lt 7 ]]; then
-	echo "CentOS 7 or higher is required to use this installer.
+if [[ "$os" == "centos" && "$os_version" -lt 9 ]]; then
+	echo "CentOS 9 or higher is required to use this installer.
 This version of CentOS is too old and unsupported."
 	exit
 fi
@@ -72,12 +66,6 @@ fi
 
 systemd-detect-virt -cq
 is_container="$?"
-
-if [[ "$os" == "fedora" && "$os_version" -eq 31 && $(uname -r | cut -d "." -f 2) -lt 6 && ! "$is_container" -eq 0 ]]; then
-	echo 'Fedora 31 is supported, but the kernel is outdated.
-Upgrade the kernel using "dnf upgrade kernel" and restart.'
-	exit
-fi
 
 if [[ "$EUID" -ne 0 ]]; then
 	echo "This installer needs to be run with superuser privileges."
@@ -295,43 +283,14 @@ if [[ ! -e /etc/wireguard/wg0.conf ]]; then
 			# Ubuntu
 			apt-get update
 			apt-get install -y wireguard qrencode $firewall
-		elif [[ "$os" == "debian" && "$os_version" -ge 11 ]]; then
-			# Debian 11 or higher
+		elif [[ "$os" == "debian" ]]; then
+			# Debian
 			apt-get update
 			apt-get install -y wireguard qrencode $firewall
-		elif [[ "$os" == "debian" && "$os_version" -eq 10 ]]; then
-			# Debian 10
-			if ! grep -qs '^deb .* buster-backports main' /etc/apt/sources.list /etc/apt/sources.list.d/*.list; then
-				echo "deb http://deb.debian.org/debian buster-backports main" >> /etc/apt/sources.list
-			fi
-			apt-get update
-			# Try to install kernel headers for the running kernel and avoid a reboot. This
-			# can fail, so it's important to run separately from the other apt-get command.
-			apt-get install -y linux-headers-"$(uname -r)"
-			# There are cleaner ways to find out the $architecture, but we require an
-			# specific format for the package name and this approach provides what we need.
-			architecture=$(dpkg --get-selections 'linux-image-*-*' | cut -f 1 | grep -oE '[^-]*$' -m 1)
-			# linux-headers-$architecture points to the latest headers. We install it
-			# because if the system has an outdated kernel, there is no guarantee that old
-			# headers were still downloadable and to provide suitable headers for future
-			# kernel updates.
-			apt-get install -y linux-headers-"$architecture"
-			apt-get install -y wireguard qrencode $firewall
-		elif [[ "$os" == "centos" && "$os_version" -ge 9 ]]; then
-			# CentOS 9 or higher
+		elif [[ "$os" == "centos" ]]; then
+			# CentOS
 			dnf install -y epel-release
 			dnf install -y wireguard-tools qrencode $firewall
-		elif [[ "$os" == "centos" && "$os_version" -eq 8 ]]; then
-			# CentOS 8
-			dnf install -y epel-release elrepo-release
-			dnf install -y kmod-wireguard wireguard-tools qrencode $firewall
-			mkdir -p /etc/wireguard/
-		elif [[ "$os" == "centos" && "$os_version" -eq 7 ]]; then
-			# CentOS 7
-			yum install -y epel-release https://www.elrepo.org/elrepo-release-7.el7.elrepo.noarch.rpm
-			yum install -y yum-plugin-elrepo
-			yum install -y kmod-wireguard wireguard-tools qrencode $firewall
-			mkdir -p /etc/wireguard/
 		elif [[ "$os" == "fedora" ]]; then
 			# Fedora
 			dnf install -y wireguard-tools qrencode $firewall
@@ -345,33 +304,15 @@ if [[ ! -e /etc/wireguard/wg0.conf ]]; then
 			apt-get update
 			apt-get install -y qrencode ca-certificates $cron $firewall
 			apt-get install -y wireguard-tools --no-install-recommends
-		elif [[ "$os" == "debian" && "$os_version" -ge 11 ]]; then
-			# Debian 11 or higher
+		elif [[ "$os" == "debian" ]]; then
+			# Debian
 			apt-get update
 			apt-get install -y qrencode ca-certificates $cron $firewall
 			apt-get install -y wireguard-tools --no-install-recommends
-		elif [[ "$os" == "debian" && "$os_version" -eq 10 ]]; then
-			# Debian 10
-			if ! grep -qs '^deb .* buster-backports main' /etc/apt/sources.list /etc/apt/sources.list.d/*.list; then
-				echo "deb http://deb.debian.org/debian buster-backports main" >> /etc/apt/sources.list
-			fi
-			apt-get update
-			apt-get install -y qrencode ca-certificates $cron $firewall
-			apt-get install -y wireguard-tools --no-install-recommends
-		elif [[ "$os" == "centos" && "$os_version" -ge 9 ]]; then
-			# CentOS 9 or higher
+		elif [[ "$os" == "centos" ]]; then
+			# CentOS
 			dnf install -y epel-release
 			dnf install -y wireguard-tools qrencode ca-certificates tar $cron $firewall
-		elif [[ "$os" == "centos" && "$os_version" -eq 8 ]]; then
-			# CentOS 8
-			dnf install -y epel-release
-			dnf install -y wireguard-tools qrencode ca-certificates tar $cron $firewall
-			mkdir -p /etc/wireguard/
-		elif [[ "$os" == "centos" && "$os_version" -eq 7 ]]; then
-			# CentOS 7
-			yum install -y epel-release
-			yum install -y wireguard-tools qrencode ca-certificates tar $cron $firewall
-			mkdir -p /etc/wireguard/
 		elif [[ "$os" == "fedora" ]]; then
 			# Fedora
 			dnf install -y wireguard-tools qrencode ca-certificates tar $cron $firewall
@@ -509,21 +450,7 @@ EOF
 	qrencode -t UTF8 < ~/"$client.conf"
 	echo -e '\xE2\x86\x91 That is a QR code containing the client configuration.'
 	echo
-	# If the kernel module didn't load, system probably had an outdated kernel
-	# We'll try to help, but will not force a kernel upgrade upon the user
-	if [[ ! "$is_container" -eq 0 ]] && ! modprobe -nq wireguard; then
-		echo "Warning!"
-		echo "Installation was finished, but the WireGuard kernel module could not load."
-		if [[ "$os" == "ubuntu" && "$os_version" -eq 1804 ]]; then
-			echo 'Upgrade the kernel and headers with "apt-get install linux-generic" and restart.'
-		elif [[ "$os" == "debian" && "$os_version" -eq 10 ]]; then
-			echo "Upgrade the kernel with \"apt-get install linux-image-$architecture\" and restart."
-		elif [[ "$os" == "centos" && "$os_version" -le 8 ]]; then
-			echo "Reboot the system to load the most recent kernel."
-		fi
-	else
-		echo "Finished!"
-	fi
+	echo "Finished!"
 	echo
 	echo "The client configuration is available in:" ~/"$client.conf"
 	echo "New clients can be added by running this script again."
@@ -641,25 +568,13 @@ else
 						# Ubuntu
 						rm -rf /etc/wireguard/
 						apt-get remove --purge -y wireguard wireguard-tools
-					elif [[ "$os" == "debian" && "$os_version" -ge 11 ]]; then
-						# Debian 11 or higher
+					elif [[ "$os" == "debian" ]]; then
+						# Debian
 						rm -rf /etc/wireguard/
 						apt-get remove --purge -y wireguard wireguard-tools
-					elif [[ "$os" == "debian" && "$os_version" -eq 10 ]]; then
-						# Debian 10
-						rm -rf /etc/wireguard/
-						apt-get remove --purge -y wireguard wireguard-dkms wireguard-tools
-					elif [[ "$os" == "centos" && "$os_version" -ge 9 ]]; then
-						# CentOS 9 or higher
+					elif [[ "$os" == "centos" ]]; then
+						# CentOS
 						dnf remove -y wireguard-tools
-						rm -rf /etc/wireguard/
-					elif [[ "$os" == "centos" && "$os_version" -eq 8 ]]; then
-						# CentOS 8
-						dnf remove -y kmod-wireguard wireguard-tools
-						rm -rf /etc/wireguard/
-					elif [[ "$os" == "centos" && "$os_version" -eq 7 ]]; then
-						# CentOS 7
-						yum remove -y kmod-wireguard wireguard-tools
 						rm -rf /etc/wireguard/
 					elif [[ "$os" == "fedora" ]]; then
 						# Fedora
@@ -672,25 +587,13 @@ else
 						# Ubuntu
 						rm -rf /etc/wireguard/
 						apt-get remove --purge -y wireguard-tools
-					elif [[ "$os" == "debian" && "$os_version" -ge 11 ]]; then
-						# Debian 11 or higher
+					elif [[ "$os" == "debian" ]]; then
+						# Debian
 						rm -rf /etc/wireguard/
 						apt-get remove --purge -y wireguard-tools
-					elif [[ "$os" == "debian" && "$os_version" -eq 10 ]]; then
-						# Debian 10
-						rm -rf /etc/wireguard/
-						apt-get remove --purge -y wireguard-tools
-					elif [[ "$os" == "centos" && "$os_version" -ge 9 ]]; then
-						# CentOS 9 or higher
+					elif [[ "$os" == "centos" ]]; then
+						# CentOS
 						dnf remove -y wireguard-tools
-						rm -rf /etc/wireguard/
-					elif [[ "$os" == "centos" && "$os_version" -eq 8 ]]; then
-						# CentOS 8
-						dnf remove -y wireguard-tools
-						rm -rf /etc/wireguard/
-					elif [[ "$os" == "centos" && "$os_version" -eq 7 ]]; then
-						# CentOS 7
-						yum remove -y wireguard-tools
 						rm -rf /etc/wireguard/
 					elif [[ "$os" == "fedora" ]]; then
 						# Fedora
