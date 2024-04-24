@@ -65,21 +65,31 @@ if ! grep -q sbin <<< "$PATH"; then
 	exit
 fi
 
-systemd-detect-virt -cq
-is_container="$?"
+# Detect if BoringTun (userspace WireGuard) needs to be used
+if ! systemd-detect-virt -cq; then
+	# Not running inside a container
+	use_boringtun="0"
+elif grep -q '^wireguard ' /proc/modules; then
+	# Running inside a container, but the wireguard kernel module is available
+	use_boringtun="0"
+else
+	# Running inside a container and the wireguard kernel module is not available
+	use_boringtun="1"
+fi
 
 if [[ "$EUID" -ne 0 ]]; then
 	echo "This installer needs to be run with superuser privileges."
 	exit
 fi
 
-if [[ "$is_container" -eq 0 ]]; then
+if [[ "$use_boringtun" -eq 1 ]]; then
 	if [ "$(uname -m)" != "x86_64" ]; then
-		echo "In containerized systems, this installer supports only the x86_64 architecture.
+		echo "In containerized systems without the wireguard kernel module, this installer
+supports only the x86_64 architecture.
 The system runs on $(uname -m) and is unsupported."
 		exit
 	fi
-	# TUN device is required to use BoringTun if running inside a container
+	# TUN device is required to use BoringTun
 	if [[ ! -e /dev/net/tun ]] || ! ( exec 7<>/dev/net/tun ) 2>/dev/null; then
 		echo "The system does not have the TUN device available.
 TUN needs to be enabled before running this installer."
@@ -245,7 +255,7 @@ if [[ ! -e /etc/wireguard/wg0.conf ]]; then
 	echo
 	new_client_dns
 	# Set up automatic updates for BoringTun if the user is fine with that
-	if [[ "$is_container" -eq 0 ]]; then
+	if [[ "$use_boringtun" -eq 1 ]]; then
 		echo
 		echo "BoringTun will be installed to set up WireGuard in the system."
 		read -p "Should automatic updates be enabled for it? [Y/n]: " boringtun_updates
@@ -278,8 +288,8 @@ if [[ ! -e /etc/wireguard/wg0.conf ]]; then
 	fi
 	read -n1 -r -p "Press any key to continue..."
 	# Install WireGuard
-	# If not running inside a container, set up the WireGuard kernel module
-	if [[ ! "$is_container" -eq 0 ]]; then
+	# If BoringTun is not required, set up with the WireGuard kernel module
+	if [[ "$use_boringtun" -eq 0 ]]; then
 		if [[ "$os" == "ubuntu" ]]; then
 			# Ubuntu
 			apt-get update
@@ -297,7 +307,7 @@ if [[ ! -e /etc/wireguard/wg0.conf ]]; then
 			dnf install -y wireguard-tools qrencode $firewall
 			mkdir -p /etc/wireguard/
 		fi
-	# Else, we are inside a container and BoringTun needs to be used
+	# Else, BoringTun needs to be used
 	else
 		# Install required packages
 		if [[ "$os" == "ubuntu" ]]; then
@@ -563,8 +573,8 @@ else
 				systemctl disable --now wg-quick@wg0.service
 				rm -f /etc/systemd/system/wg-quick@wg0.service.d/boringtun.conf
 				rm -f /etc/sysctl.d/99-wireguard-forward.conf
-				# Different packages were installed if the system was containerized or not
-				if [[ ! "$is_container" -eq 0 ]]; then
+				# Different stuff was installed depending on whether BoringTun was used or not
+				if [[ "$use_boringtun" -eq 0 ]]; then
 					if [[ "$os" == "ubuntu" ]]; then
 						# Ubuntu
 						rm -rf /etc/wireguard/
