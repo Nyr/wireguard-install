@@ -145,7 +145,7 @@ new_client_setup () {
 	# Given a list of the assigned internal IPv4 addresses, obtain the lowest still
 	# available octet. Important to start looking at 2, because 1 is our gateway.
 	octet=2
-	while grep AllowedIPs /etc/wireguard/wg0.conf | cut -d "." -f 4 | cut -d "/" -f 1 | grep -q "$octet"; do
+	while grep AllowedIPs /etc/wireguard/wg0.conf | cut -d "." -f 4 | cut -d "/" -f 1 | grep -q "^$octet$"; do
 		(( octet++ ))
 	done
 	# Don't break the WireGuard configuration in case the address space is full
