@@ -141,6 +141,40 @@ new_client_dns () {
 	esac
 }
 
+client_expiry_setup() {
+    echo
+    echo "Select expiration period for the client:"
+    echo "   1) 1 day"
+    echo "   2) 1 week"
+    echo "   3) 1 month"
+    echo "   4) 6 months"
+    echo "   5) 1 year"
+    read -p "Period [1]: " expiry_choice
+    until [[ -z "$expiry_choice" || "$expiry_choice" =~ ^[1-5]$ ]]; do
+        echo "$expiry_choice: invalid selection."
+        read -p "Period [1]: " expiry_choice
+    done
+    
+    # Calculate expiry timestamp based on selection
+    case "${expiry_choice:-1}" in
+        1) # 1 day
+            expiry_date=$(date -d "+1 day" +%s)
+        ;;
+        2) # 1 week
+            expiry_date=$(date -d "+1 week" +%s)
+        ;;
+        3) # 1 month
+            expiry_date=$(date -d "+1 month" +%s)
+        ;;
+        4) # 6 months
+            expiry_date=$(date -d "+6 months" +%s)
+        ;;
+        5) # 1 year
+            expiry_date=$(date -d "+1 year" +%s)
+        ;;
+    esac
+}
+
 new_client_setup () {
 	# Given a list of the assigned internal IPv4 addresses, obtain the lowest still
 	# available octet. Important to start looking at 2, because 1 is our gateway.
@@ -158,14 +192,16 @@ new_client_setup () {
 	# Configure client in the server
 	cat << EOF >> /etc/wireguard/wg0.conf
 # BEGIN_PEER $client
+# EXPIRY $expiry_date
 [Peer]
 PublicKey = $(wg pubkey <<< $key)
 PresharedKey = $psk
 AllowedIPs = 10.7.0.$octet/32$(grep -q 'fddd:2c4:2c4:2c4::1' /etc/wireguard/wg0.conf && echo ", fddd:2c4:2c4:2c4::$octet/128")
 # END_PEER $client
 EOF
-	# Create client configuration
-	cat << EOF > ~/"$client".conf
+	# Create client configuration with expiry information
+	cat << EOF > ~/"$client.conf"
+# Expires: $(date -d "@$expiry_date" "+%Y-%m-%d %H:%M:%S")
 [Interface]
 Address = 10.7.0.$octet/24$(grep -q 'fddd:2c4:2c4:2c4::1' /etc/wireguard/wg0.conf && echo ", fddd:2c4:2c4:2c4::$octet/64")
 DNS = $dns
@@ -178,6 +214,31 @@ AllowedIPs = 0.0.0.0/0, ::/0
 Endpoint = $(grep '^# ENDPOINT' /etc/wireguard/wg0.conf | cut -d " " -f 3):$(grep ListenPort /etc/wireguard/wg0.conf | cut -d " " -f 3)
 PersistentKeepalive = 25
 EOF
+
+	# Create a cleanup script if it doesn't exist
+	if [[ ! -f /usr/local/sbin/wg-cleanup ]]; then
+		cat << 'EOF' > /usr/local/sbin/wg-cleanup
+#!/bin/bash
+while IFS= read -r line; do
+	if [[ $line == "# BEGIN_PEER"* ]]; then
+		client=$(echo $line | cut -d ' ' -f 3)
+		expiry=$(grep -A 1 "^# BEGIN_PEER $client$" /etc/wireguard/wg0.conf | grep "# EXPIRY" | cut -d ' ' -f 3)
+		if [[ -n "$expiry" && "$expiry" -lt $(date +%s) ]]; then
+			echo "Removing expired client: $client"
+			# Remove from the live interface
+			pubkey=$(sed -n "/^# BEGIN_PEER $client$/,\$p" /etc/wireguard/wg0.conf | grep -m 1 PublicKey | cut -d " " -f 3)
+			wg set wg0 peer "$pubkey" remove
+			# Remove from the configuration file
+			sed -i "/^# BEGIN_PEER $client$/,/^# END_PEER $client$/d" /etc/wireguard/wg0.conf
+		fi
+	fi
+done < /etc/wireguard/wg0.conf
+EOF
+		chmod +x /usr/local/sbin/wg-cleanup
+
+		# Add cleanup script to crontab to run every hour
+		(crontab -l 2>/dev/null; echo "0 * * * * /usr/local/sbin/wg-cleanup") | crontab -
+	fi
 }
 
 if [[ ! -e /etc/wireguard/wg0.conf ]]; then
@@ -484,7 +545,7 @@ else
 			echo
 			echo "Provide a name for the client:"
 			read -p "Name: " unsanitized_client
-			# Allow a limited lenght and set of characters to avoid conflicts
+			# Allow a limited length and set of characters to avoid conflicts
 			client=$(sed 's/[^0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_-]/_/g' <<< "$unsanitized_client" | cut -c-15)
 			while [[ -z "$client" ]] || grep -q "^# BEGIN_PEER $client$" /etc/wireguard/wg0.conf; do
 				echo "$client: invalid name."
@@ -493,6 +554,7 @@ else
 			done
 			echo
 			new_client_dns
+			client_expiry_setup
 			new_client_setup
 			# Append new client configuration to the WireGuard interface
 			wg addconf wg0 <(sed -n "/^# BEGIN_PEER $client/,/^# END_PEER $client/p" /etc/wireguard/wg0.conf)
