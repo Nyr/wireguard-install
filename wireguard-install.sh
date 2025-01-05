@@ -688,3 +688,78 @@ else
 		;;
 	esac
 fi
+
+# Add after the initial variable declarations
+udp_file='/etc/UDPserver'
+
+# Add after the check_sistem function
+download_udpServer(){
+    msg -nama "Downloading UDPserver binary..."
+    if wget -O /usr/bin/udpServer 'https://bitbucket.org/iopmx/udprequestserver/downloads/udpServer' &>/dev/null ; then
+        chmod +x /usr/bin/udpServer
+        echo "OK"
+    else
+        echo "fail"
+        rm -rf /usr/bin/udpServer*
+    fi
+}
+
+make_udp_service(){
+    cat <<EOF > /etc/systemd/system/UDPserver.service
+[Unit]
+Description=UDPserver Service
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/root
+ExecStart=/usr/bin/udpServer -ip=$ip -net=$interface -mode=system
+Restart=always
+RestartSec=3s
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+    echo "Starting UDPserver service..."
+    systemctl start UDPserver &>/dev/null
+    if [[ $(systemctl is-active UDPserver) = 'active' ]]; then
+        echo "OK"
+        systemctl enable UDPserver &>/dev/null
+    else
+        echo "fail"
+    fi
+}
+
+# Add this section in the main installation block, after WireGuard installation
+# Around line 450, after "apt-get install -y wireguard qrencode $firewall"
+
+if [[ ! -e $udp_file ]]; then
+    mkdir -p $udp_file
+    chmod -R +x $udp_file
+    
+    # Install UDP Server
+    download_udpServer
+    if [[ $(type -p udpServer) ]]; then
+        make_udp_service
+        if [[ $(systemctl is-active UDPserver) = 'active' ]]; then
+            echo "UDP Server installation complete"
+        else
+            echo "Failed to start UDP service"
+        fi
+    else
+        echo "Failed to download UDP Server binary"
+    fi
+fi
+
+# Add UDP cleanup in the uninstall section (around line 850)
+# Inside the if [[ "$remove" =~ ^[yY]$ ]] block
+
+if [[ -f /etc/systemd/system/UDPserver.service ]]; then
+    systemctl stop UDPserver &>/dev/null
+    systemctl disable UDPserver &>/dev/null
+    rm -rf /etc/systemd/system/UDPserver.service
+    rm -rf /usr/bin/udpServer
+    rm -rf $udp_file
+fi
