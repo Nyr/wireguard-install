@@ -144,85 +144,6 @@ TUN needs to be enabled before running this installer."
 		fi
 		wg_use_boringtun="1"
 	fi
-
-	# Set up color display
-	local colorterms="^(xterm-color|\.*-256color)$"
-	if [[ "$TERM" =~ $colorterms ]]; then
-		# Color Templates
-		
-		# Reset
-		Color_Off='\033[0m'       # Text Reset
-
-		# Regular Colors
-		Black='\033[0;30m'        # Black
-		Red='\033[0;31m'          # Red
-		Green='\033[0;32m'        # Green
-		Yellow='\033[0;33m'       # Yellow
-		Blue='\033[0;34m'         # Blue
-		Purple='\033[0;35m'       # Purple
-		Cyan='\033[0;36m'         # Cyan
-		White='\033[0;37m'        # White
-
-		# Bold
-		BBlack='\033[1;30m'       # Black
-		BRed='\033[1;31m'         # Red
-		BGreen='\033[1;32m'       # Green
-		BYellow='\033[1;33m'      # Yellow
-		BBlue='\033[1;34m'        # Blue
-		BPurple='\033[1;35m'      # Purple
-		BCyan='\033[1;36m'        # Cyan
-		BWhite='\033[1;37m'       # White
-
-		# Underline
-		UBlack='\033[4;30m'       # Black
-		URed='\033[4;31m'         # Red
-		UGreen='\033[4;32m'       # Green
-		UYellow='\033[4;33m'      # Yellow
-		UBlue='\033[4;34m'        # Blue
-		UPurple='\033[4;35m'      # Purple
-		UCyan='\033[4;36m'        # Cyan
-		UWhite='\033[4;37m'       # White
-
-		# Background
-		On_Black='\033[40m'       # Black
-		On_Red='\033[41m'         # Red
-		On_Green='\033[42m'       # Green
-		On_Yellow='\033[43m'      # Yellow
-		On_Blue='\033[44m'        # Blue
-		On_Purple='\033[45m'      # Purple
-		On_Cyan='\033[46m'        # Cyan
-		On_White='\033[47m'       # White
-
-		# High Intensity
-		IBlack='\033[0;90m'       # Black
-		IRed='\033[0;91m'         # Red
-		IGreen='\033[0;92m'       # Green
-		IYellow='\033[0;93m'      # Yellow
-		IBlue='\033[0;94m'        # Blue
-		IPurple='\033[0;95m'      # Purple
-		ICyan='\033[0;96m'        # Cyan
-		IWhite='\033[0;97m'       # White
-
-		# Bold High Intensity
-		BIBlack='\033[1;90m'      # Black
-		BIRed='\033[1;91m'        # Red
-		BIGreen='\033[1;92m'      # Green
-		BIYellow='\033[1;93m'     # Yellow
-		BIBlue='\033[1;94m'       # Blue
-		BIPurple='\033[1;95m'     # Purple
-		BICyan='\033[1;96m'       # Cyan
-		BIWhite='\033[1;97m'      # White
-
-		# High Intensity backgrounds
-		On_IBlack='\033[0;100m'   # Black
-		On_IRed='\033[0;101m'     # Red
-		On_IGreen='\033[0;102m'   # Green
-		On_IYellow='\033[0;103m'  # Yellow
-		On_IBlue='\033[0;104m'    # Blue
-		On_IPurple='\033[0;105m'  # Purple
-		On_ICyan='\033[0;106m'    # Cyan
-		On_IWhite='\033[0;107m'   # White
-	fi
 	
 	# Set up some variables and configure things
 	if [[ -e /etc/wireguard/wg0.conf ]]; then
@@ -283,18 +204,6 @@ you backup old configuration, uninstall wireguard and re-run this script."
 	
 }
 	# END_FUNC: INITIAL_SETUP
-
-
-	# BEGIN_FUNC: PRINT_COLOR
-print_color () {
-	local pc_output=""
-	for arg in "$@"; do
-		pc_output="${pc_output}${arg}"
-	done
-	pc_output="${pc_output}${Color_Off}"
-	echo -e "${pc_output}"
-}
-	# END_FUNC: PRINT_COLOR
 
 
 
@@ -586,6 +495,9 @@ remove_client () {
 		fi
 		# Remove from the configuration file
 		sed -i "/^# BEGIN_PEER $client$/,/^# END_PEER $client$/d" /etc/wireguard/wg0.conf
+
+		# Remove backup config files
+		rm -f /etc/wireguard/clients/$client.*
 		
 		# Remove from internal arrays
 		wg_clients_array=( "${wg_clients_array[@]:0:$((client_number-1))}" "${wg_clients_array[@]:$client_number}" )
@@ -621,6 +533,7 @@ configure_downloader () {
 	if ! dlapp=$(command -v curl) && dl_args="$wget_args" && ! dlapp=$(command -v wget) ; then
 		echo "Wget is required to use this installer."
 		read -n1 -r -p "Press any key to install Wget and continue..."
+		# use the right package manager for fed & cent
 		if [[ "$wg_os" =~ (fedora|centos) ]]; then dnf install -y wget; else
 			apt-get update
 			apt-get install -y wget
@@ -881,7 +794,7 @@ Environment=WG_SUDO=1" > /etc/systemd/system/wg-quick@wg0.service.d/boringtun.co
 		# Deploy upgrade script
 		cat << 'EOF' > $wginst_dir/wg-boringtun-upgrade.sh
 #!/bin/bash
-latest=$( $wg_dlcmd "${ck_url}" 2>/dev/null )
+latest=$( ${wg_dlcmd} "${ck_url}" 2>/dev/null )
 # If server did not provide an appropriate response, exit
 if ! head -1 <<< "$latest" | grep -qiE "^boringtun.+[0-9]+\.[0-9]+.*$"; then
 	echo "Update server unavailable"
@@ -891,7 +804,7 @@ current=$(/usr/local/sbin/boringtun -V)
 if [[ "$current" != "$latest" ]]; then
 	xdir=$(mktemp -d)
 	# If download and extraction are successful, upgrade the boringtun binary
-	if $wg_dlcmd "${dl_url}" 2>/dev/null | tar xz -C "$xdir" --wildcards "boringtun-*/boringtun" --strip-components 1; then
+	if ${wg_dlcmd} "${dl_url}" 2>/dev/null | tar xz -C "$xdir" --wildcards "boringtun-*/boringtun" --strip-components 1; then
 		systemctl stop wg-quick@wg0.service
 		rm -f /usr/local/sbin/boringtun
 		mv "$xdir"/boringtun /usr/local/sbin/boringtun
@@ -916,12 +829,13 @@ ExecStart=${wginst_dir}/wg-boringtun-upgrade.sh
 WorkingDirectory=/root/
 EOF
 		# And Timer
+		local dow=$(date +'%a')
 		cat << EOF > /etc/systemd/system/boringtun-upgrade.timer
 [Unit]
 Description=BoringTun-Upgrade
 
 [Timer]
-OnCalendar=Mon *-*-* 03:00:00
+OnCalendar=%{dow} *-*-* 03:00:00
 RandomizedDelaySec=3h
 Persistent=true
 
@@ -930,7 +844,6 @@ WantedBy=timers.target
 EOF
 		chmod 644 /etc/systemd/system/boringtun-upgrade.service
 		chmod 644 /etc/systemd/system/boringtun-upgrade.timer
-		chmod 744 $wginst_dir/boringtun-upgrade
 		# Timer is set to run every monday between 3:00 and 6:00 randomized
 		systemctl enable boringtun-upgrade.timer && systemctl start boringtun-upgrade.timer
 	fi
@@ -941,7 +854,8 @@ EOF
 	# BEGIN_FUNC: INSTALL_PACKAGES
 install_packages () {
 	local deb_pack="wireguard"
-	local cenfed_pack="wireguard-tools qrencode ca-certificates tar ${wg_firewall}"
+	local cenfed_pack="wireguard-tools"
+	local all_tools="qrencode ca-certificates tar ${wg_firewall}"
 	
 	# if using BoringTun, install wg-tools without recommended packages for deb/ubu
 	[[ -n "$wg_use_boringtun" ]] && deb_pack="wireguard-tools --no-install-recommends"
@@ -951,23 +865,22 @@ install_packages () {
 		"ubuntu" )
 			# Ubuntu
 			apt-get update
-			apt-get install -y qrencode ca-certificates $wg_firewall
+			apt-get install -y $all_tools
 			apt-get install -y $deb_pack
 		;;
 		"debian" )
 			# Debian
 			apt-get update
-			apt-get install -y qrencode ca-certificates $wg_firewall
+			apt-get install -y $all_tools
 			apt-get install -y $deb_pack
 		;;
 		"centos" )
 			# CentOS
-			dnf install -y epel-release
-			dnf install -y $cenfed_pack
+			dnf install -y epel-release $all_tools $cenfed_pack
 		;;
 		"fedora" )
 			# Fedora Linux
-			dnf install -y $cenfed_pack
+			dnf install -y $all_tools $cenfed_pack
 			mkdir -p /etc/wireguard/
 		;;
 	esac
@@ -1268,6 +1181,7 @@ uninstall_wireguard () {
 		read -p "Confirm WireGuard removal? [y/N]: " remove_confirm
 	done
 	if [[ "${remove_confirm,,}" =~ ^y ]]; then
+		# disable and remove services and boringtun config file
 		systemctl disable --now wg-quick@wg0.service > /dev/null 2>&1
 		systemctl disable --now boringtun-upgrade.timer > /dev/null 2>&1
 		systemctl disable --now boringtun-upgrade.service > /dev/null 2>&1
@@ -1275,6 +1189,7 @@ uninstall_wireguard () {
 		rm -f /etc/systemd/system/boringtun-upgrade.service
 		rm -f /etc/systemd/system/boringtun-upgrade.timer
 		
+		# Unisntall wg and wg-tools as needed
 		if [[ "$wg_os" == "ubuntu" ]]; then
 			# Ubuntu
 			apt-get remove --purge -y wireguard wireguard-tools
@@ -1289,7 +1204,8 @@ uninstall_wireguard () {
 			dnf remove -y wireguard-tools
 		fi
 		
-		rm -f /usr/local/sbin/boringtun /usr/local/sbin/boringtun-upgrade
+		# Remove our boringtun, and our script dir, and clean up our etc/wireguard dir
+		rm -f /usr/local/sbin/boringtun
 		rm -rf "${wginst_dir}"
 		rm -rf /etc/wireguard/
 		
@@ -1312,45 +1228,46 @@ uninstall_wireguard () {
 
 	# BEGIN_FUNC: DISPLAY_MENU
 display_menu () {
+	# Spaces in strings used to assist formatting
 	local Title_Name=" Wireguard RoadWarrior Utility "
 	local Box_Head="==============================="
 	local Title_String="${Box_Head}\n   ${Title_Name}\n   ${Box_Head}"
-	local Install_Head=" Wireguard Installation Status "
+	local Install_Head="    Wireguard Installation Status    "
 	local Install_String
 	local Install_Color
 	local Allowed_Results="0"
 	
 	echo "$wg_ipv6_range"
 	
-	print_color "   ${Yellow}${On_Black}" "${Title_String}"
+	echo "${Title_String}"
 	echo
 	if [[ $wg_installed -eq 1 ]]; then
-		# Installed, use green text and 11 spaces before
-		Install_Color="           ${Green}"
+		
+		# Installed, say so and put 11 spaces before
+		Install_State="           INSTALLED"
 	else
-		# Not Installed, use red text and 9 spaces before
-		Install_Color="         ${Red}NOT "
+		# Not Installed, say so and put 9 spaces before
+		Install_State="         NOT INSTALLED"
 	fi
-	Install_String="${Box_Head}\n   ${Install_Head}\n   ${Install_Color}INSTALLED"
-	print_color "   ${Yellow}${On_Black}" "${Install_String}"
-	print_color "   ${Yellow}${On_Black}" "${Box_Head}"
+	Install_String="${Box_Head}\n${Install_Head}\n   ${Install_State}\n${Box_Head}"
+	echo "${Install_String}"
 	echo
 	echo "   Choose an Option:"
 	echo
 	if [[ $wg_installed -ne 1 ]]; then
-		print_color "     ${Green}${On_Black}" "1) Install Wireguard"
+		echo "     1) Install Wireguard"
 		Allowed_Results="${Allowed_Results}1"
 	else
 		if [[ $wg_num_clients -lt 253 ]]; then
-			print_color "     ${Green}${On_Black}" "2) Create New Client"
+			echo "     2) Create New Client"
 			Allowed_Results="${Allowed_Results}2"
 		fi
 		if [[ $wg_num_clients -gt 0 ]]; then
-			print_color "     ${Green}${On_Black}" "3) Remove an existing client"
+			echo "     3) Remove an existing client"
 			Allowed_Results="${Allowed_Results}3"
 		fi
 		echo
-		print_color "     ${Red}${On_Black}" "8) Uninstall Wireguard"
+		echo "     8) Uninstall Wireguard"
 		Allowed_Results="${Allowed_Results}8"
 	fi
 	echo
