@@ -11,7 +11,7 @@ if readlink /proc/$$/exe | grep -q "dash"; then
 	exit
 fi
 
-# Discard stdin. Needed when running from an one-liner which includes a newline
+# Discard stdin. Needed when running from a one-liner which includes a newline
 read -N 999999 -t 0.001
 
 # Detect OS
@@ -263,7 +263,7 @@ if [[ ! -e /etc/wireguard/wg0.conf ]]; then
 		ip6=$(ip -6 addr | grep 'inet6 [23]' | cut -d '/' -f 1 | grep -oE '([0-9a-fA-F]{0,4}:){1,7}[0-9a-fA-F]{0,4}' | sed -n "$ip6_number"p)
 	fi
 	echo
-	echo "What port should WireGuard listen to?"
+	echo "What port should WireGuard listen on?"
 	read -p "Port [51820]: " port
 	until [[ -z "$port" || "$port" =~ ^[0-9]+$ && "$port" -le 65535 ]]; do
 		echo "$port: invalid port."
@@ -281,7 +281,7 @@ if [[ ! -e /etc/wireguard/wg0.conf ]]; then
 	# Set up automatic updates for BoringTun if the user is fine with that
 	if [[ "$use_boringtun" -eq 1 ]]; then
 		echo
-		echo "BoringTun will be installed to set up WireGuard in the system."
+		echo "BoringTun will be installed to set up WireGuard on the system."
 		read -p "Should automatic updates be enabled for it? [Y/n]: " boringtun_updates
 		until [[ "$boringtun_updates" =~ ^[yYnN]*$ ]]; do
 			echo "$remove: invalid selection."
@@ -469,7 +469,7 @@ if [[ "$current" != "$latest" ]]; then
 		rm -f /usr/local/sbin/boringtun
 		mv "$xdir"/boringtun /usr/local/sbin/boringtun
 		systemctl start wg-quick@wg0.service
-		echo "Succesfully updated to $(/usr/local/sbin/boringtun -V)"
+		echo "Successfully updated to $(/usr/local/sbin/boringtun -V)"
 	else
 		echo "boringtun update failed"
 	fi
