@@ -172,6 +172,31 @@ new_client_dns () {
 	esac
 }
 
+get_endpoint(){
+	if grep -q '^# ENDPOINT' /etc/wireguard/wg0.conf; then
+		grep '^# ENDPOINT' /etc/wireguard/wg0.conf | cut -d " " -f 3
+	fi
+}
+
+set_endpoint(){
+	local current_endpoint
+	current_endpoint=$(get_endpoint)
+
+	if [[ -n "$current_endpoint" ]]; then
+		echo "Current endpoint: $current_endpoint"
+	else
+		echo "No current endpoint found in wg0.conf."
+	fi
+
+	read -p "New endpoint: " new_endpoint
+
+	sed -i "s|^# ENDPOINT $current_endpoint$|# ENDPOINT $new_endpoint|g" /etc/wireguard/wg0.conf
+
+	echo "Update successful. Current endpoint: $(get_endpoint)"
+}
+
+
+
 new_client_setup () {
 	# Given a list of the assigned internal IPv4 addresses, obtain the lowest still
 	# available octet. Important to start looking at 2, because 1 is our gateway.
@@ -206,7 +231,7 @@ PrivateKey = $key
 PublicKey = $(grep PrivateKey /etc/wireguard/wg0.conf | cut -d " " -f 3 | wg pubkey)
 PresharedKey = $psk
 AllowedIPs = 0.0.0.0/0, ::/0
-Endpoint = $(grep '^# ENDPOINT' /etc/wireguard/wg0.conf | cut -d " " -f 3):$(grep ListenPort /etc/wireguard/wg0.conf | cut -d " " -f 3)
+Endpoint = $(get_endpoint):$(grep ListenPort /etc/wireguard/wg0.conf | cut -d " " -f 3)
 PersistentKeepalive = 25
 EOF
 }
@@ -504,10 +529,11 @@ else
 	echo "Select an option:"
 	echo "   1) Add a new client"
 	echo "   2) Remove an existing client"
-	echo "   3) Remove WireGuard"
-	echo "   4) Exit"
+	echo "   3) Change WireGuard endpoint"
+	echo "   4) Remove WireGuard"
+	echo "   5) Exit"
 	read -p "Option: " option
-	until [[ "$option" =~ ^[1-4]$ ]]; do
+	until [[ "$option" =~ ^[1-5]$ ]]; do
 		echo "$option: invalid selection."
 		read -p "Option: " option
 	done
@@ -574,6 +600,11 @@ else
 			exit
 		;;
 		3)
+			echo
+			set_endpoint
+			exit
+		;;
+		4)
 			echo
 			read -p "Confirm WireGuard removal? [y/N]: " remove
 			until [[ "$remove" =~ ^[yYnN]*$ ]]; do
@@ -653,7 +684,7 @@ else
 			fi
 			exit
 		;;
-		4)
+		5)
 			exit
 		;;
 	esac
