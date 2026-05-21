@@ -53,6 +53,29 @@ is_valid_ipv4() {
 	return 0
 }
 
+# RFC 4193 ULA /64 prefix: fd + 40 random bits, formatted as fdXX:XXXX:XXXX:XXXX
+gen_random_ula_prefix() {
+	local r
+	r=$(od -An -N5 -tx1 /dev/urandom | tr -d ' \n')
+	printf 'fd%s:%s%s:%s%s' \
+		"${r:0:2}" "${r:2:2}" "${r:4:2}" "${r:6:2}" "${r:8:2}"
+}
+
+# Read the existing ULA prefix from wg0.conf, or generate a new random one.
+# Keeps backward compatibility with previous installs that used the fixed
+# ${ula_prefix}:: prefix.
+detect_or_generate_ula_prefix() {
+	local existing
+	if [[ -f /etc/wireguard/wg0.conf ]]; then
+		existing=$(grep -oE 'fd[0-9a-f]{2}(:[0-9a-f]{1,4}){3}' /etc/wireguard/wg0.conf | head -1)
+		if [[ -n "$existing" ]]; then
+			echo "$existing"
+			return 0
+		fi
+	fi
+	gen_random_ula_prefix
+}
+
 # Discard stdin. Needed when running from a one-liner which includes a newline
 read -N 999999 -t 0.001 || true
 
@@ -136,6 +159,11 @@ acquire_lock
 
 # Store the absolute path of the directory where the script is located
 script_dir="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+
+# Resolve the IPv6 ULA prefix used for the VPN's internal network. For an
+# existing installation we read it back from wg0.conf so we don't break peers;
+# for a fresh install we generate a random RFC 4193 prefix.
+ula_prefix=$(detect_or_generate_ula_prefix)
 
 new_client_dns () {
 	echo "Select a DNS server for the client:"
@@ -239,13 +267,13 @@ new_client_setup () {
 [Peer]
 PublicKey = $(wg pubkey <<< "$key")
 PresharedKey = $psk
-AllowedIPs = 10.7.0.$octet/32$(grep -q 'fddd:2c4:2c4:2c4::1' /etc/wireguard/wg0.conf && echo ", fddd:2c4:2c4:2c4::$octet/128")
+AllowedIPs = 10.7.0.$octet/32$(grep -q "${ula_prefix}::1" /etc/wireguard/wg0.conf && echo ", ${ula_prefix}::$octet/128")
 # END_PEER $client
 EOF
 	# Create client configuration
 	cat << EOF > "$script_dir"/"$client".conf
 [Interface]
-Address = 10.7.0.$octet/24$(grep -q 'fddd:2c4:2c4:2c4::1' /etc/wireguard/wg0.conf && echo ", fddd:2c4:2c4:2c4::$octet/64")
+Address = 10.7.0.$octet/24$(grep -q "${ula_prefix}::1" /etc/wireguard/wg0.conf && echo ", ${ula_prefix}::$octet/64")
 DNS = $dns
 PrivateKey = $key
 
@@ -430,7 +458,7 @@ Environment=WG_SUDO=1" > /etc/systemd/system/wg-quick@wg0.service.d/boringtun.co
 # ENDPOINT $([[ -n "${public_ip:-}" ]] && echo "$public_ip" || echo "$ip")
 
 [Interface]
-Address = 10.7.0.1/24$([[ -n "$ip6" ]] && echo ", fddd:2c4:2c4:2c4::1/64")
+Address = 10.7.0.1/24$([[ -n "$ip6" ]] && echo ", ${ula_prefix}::1/64")
 PrivateKey = $(wg genkey)
 ListenPort = $port
 
@@ -457,10 +485,10 @@ EOF
 		firewall-cmd --direct --add-rule ipv4 nat POSTROUTING 0 -s 10.7.0.0/24 ! -d 10.7.0.0/24 -j SNAT --to "$ip"
 		firewall-cmd --permanent --direct --add-rule ipv4 nat POSTROUTING 0 -s 10.7.0.0/24 ! -d 10.7.0.0/24 -j SNAT --to "$ip"
 		if [[ -n "$ip6" ]]; then
-			firewall-cmd --zone=trusted --add-source=fddd:2c4:2c4:2c4::/64
-			firewall-cmd --permanent --zone=trusted --add-source=fddd:2c4:2c4:2c4::/64
-			firewall-cmd --direct --add-rule ipv6 nat POSTROUTING 0 -s fddd:2c4:2c4:2c4::/64 ! -d fddd:2c4:2c4:2c4::/64 -j SNAT --to "$ip6"
-			firewall-cmd --permanent --direct --add-rule ipv6 nat POSTROUTING 0 -s fddd:2c4:2c4:2c4::/64 ! -d fddd:2c4:2c4:2c4::/64 -j SNAT --to "$ip6"
+			firewall-cmd --zone=trusted --add-source=${ula_prefix}::/64
+			firewall-cmd --permanent --zone=trusted --add-source=${ula_prefix}::/64
+			firewall-cmd --direct --add-rule ipv6 nat POSTROUTING 0 -s ${ula_prefix}::/64 ! -d ${ula_prefix}::/64 -j SNAT --to "$ip6"
+			firewall-cmd --permanent --direct --add-rule ipv6 nat POSTROUTING 0 -s ${ula_prefix}::/64 ! -d ${ula_prefix}::/64 -j SNAT --to "$ip6"
 		fi
 	else
 		# Create a service to set up persistent iptables rules
@@ -486,11 +514,11 @@ ExecStop=$iptables_path -w 5 -D INPUT -p udp --dport $port -j ACCEPT
 ExecStop=$iptables_path -w 5 -D FORWARD -s 10.7.0.0/24 -j ACCEPT
 ExecStop=$iptables_path -w 5 -D FORWARD -m state --state RELATED,ESTABLISHED -j ACCEPT" > /etc/systemd/system/wg-iptables.service
 		if [[ -n "$ip6" ]]; then
-			echo "ExecStart=$ip6tables_path -w 5 -t nat -A POSTROUTING -s fddd:2c4:2c4:2c4::/64 ! -d fddd:2c4:2c4:2c4::/64 -j SNAT --to $ip6
-ExecStart=$ip6tables_path -w 5 -I FORWARD -s fddd:2c4:2c4:2c4::/64 -j ACCEPT
+			echo "ExecStart=$ip6tables_path -w 5 -t nat -A POSTROUTING -s ${ula_prefix}::/64 ! -d ${ula_prefix}::/64 -j SNAT --to $ip6
+ExecStart=$ip6tables_path -w 5 -I FORWARD -s ${ula_prefix}::/64 -j ACCEPT
 ExecStart=$ip6tables_path -w 5 -I FORWARD -m state --state RELATED,ESTABLISHED -j ACCEPT
-ExecStop=$ip6tables_path -w 5 -t nat -D POSTROUTING -s fddd:2c4:2c4:2c4::/64 ! -d fddd:2c4:2c4:2c4::/64 -j SNAT --to $ip6
-ExecStop=$ip6tables_path -w 5 -D FORWARD -s fddd:2c4:2c4:2c4::/64 -j ACCEPT
+ExecStop=$ip6tables_path -w 5 -t nat -D POSTROUTING -s ${ula_prefix}::/64 ! -d ${ula_prefix}::/64 -j SNAT --to $ip6
+ExecStop=$ip6tables_path -w 5 -D FORWARD -s ${ula_prefix}::/64 -j ACCEPT
 ExecStop=$ip6tables_path -w 5 -D FORWARD -m state --state RELATED,ESTABLISHED -j ACCEPT" >> /etc/systemd/system/wg-iptables.service
 		fi
 		echo "RemainAfterExit=yes
@@ -637,12 +665,12 @@ else
 					firewall-cmd --permanent --zone=trusted --remove-source=10.7.0.0/24
 					firewall-cmd --direct --remove-rule ipv4 nat POSTROUTING 0 -s 10.7.0.0/24 ! -d 10.7.0.0/24 -j SNAT --to "$ip"
 					firewall-cmd --permanent --direct --remove-rule ipv4 nat POSTROUTING 0 -s 10.7.0.0/24 ! -d 10.7.0.0/24 -j SNAT --to "$ip"
-					if grep -qs 'fddd:2c4:2c4:2c4::1/64' /etc/wireguard/wg0.conf; then
-						ip6=$(firewall-cmd --direct --get-rules ipv6 nat POSTROUTING | grep '\-s fddd:2c4:2c4:2c4::/64 '"'"'!'"'"' -d fddd:2c4:2c4:2c4::/64' | grep -oE '[^ ]+$')
-						firewall-cmd --zone=trusted --remove-source=fddd:2c4:2c4:2c4::/64
-						firewall-cmd --permanent --zone=trusted --remove-source=fddd:2c4:2c4:2c4::/64
-						firewall-cmd --direct --remove-rule ipv6 nat POSTROUTING 0 -s fddd:2c4:2c4:2c4::/64 ! -d fddd:2c4:2c4:2c4::/64 -j SNAT --to "$ip6"
-						firewall-cmd --permanent --direct --remove-rule ipv6 nat POSTROUTING 0 -s fddd:2c4:2c4:2c4::/64 ! -d fddd:2c4:2c4:2c4::/64 -j SNAT --to "$ip6"
+					if grep -qs "${ula_prefix}::1/64" /etc/wireguard/wg0.conf; then
+						ip6=$(firewall-cmd --direct --get-rules ipv6 nat POSTROUTING | grep -- "-s ${ula_prefix}::/64 '!' -d ${ula_prefix}::/64" | grep -oE '[^ ]+$')
+						firewall-cmd --zone=trusted --remove-source=${ula_prefix}::/64
+						firewall-cmd --permanent --zone=trusted --remove-source=${ula_prefix}::/64
+						firewall-cmd --direct --remove-rule ipv6 nat POSTROUTING 0 -s ${ula_prefix}::/64 ! -d ${ula_prefix}::/64 -j SNAT --to "$ip6"
+						firewall-cmd --permanent --direct --remove-rule ipv6 nat POSTROUTING 0 -s ${ula_prefix}::/64 ! -d ${ula_prefix}::/64 -j SNAT --to "$ip6"
 					fi
 				else
 					systemctl disable --now wg-iptables.service
