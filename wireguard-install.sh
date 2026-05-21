@@ -108,10 +108,32 @@ trap 'rollback_partial_install' ERR
 
 acquire_lock() {
 	local lockfile="/var/lock/wireguard-install.lock"
-	exec {_lock_fd}>"$lockfile" || die "Cannot create lockfile at $lockfile"
-	if ! flock -n "$_lock_fd"; then
-		die "Another wireguard-install process is already running."
+
+	# Stale-lock detection: if the lockfile records a PID and that PID is
+	# no longer alive, the previous installer crashed (or was killed) before
+	# releasing the lock. Drop the stale file so flock starts clean.
+	if [[ -s "$lockfile" ]]; then
+		local stale_pid
+		stale_pid=$(head -1 "$lockfile" 2>/dev/null | tr -d '[:space:]')
+		if [[ "$stale_pid" =~ ^[0-9]+$ ]] && ! kill -0 "$stale_pid" 2>/dev/null; then
+			echo "Removing stale lockfile from dead PID $stale_pid" >&2
+			rm -f "$lockfile"
+		fi
 	fi
+
+	# Open the lockfile in append mode so we don't truncate a sibling's PID
+	exec {_lock_fd}>>"$lockfile" || die "Cannot create lockfile at $lockfile"
+	if ! flock -n "$_lock_fd"; then
+		local holder
+		holder=$(head -1 "$lockfile" 2>/dev/null | tr -d '[:space:]')
+		if [[ -n "$holder" ]]; then
+			die "Another wireguard-install process is already running (PID $holder). Check 'ps -p $holder' — it may be stopped/suspended; if so, kill it and remove $lockfile."
+		fi
+		die "Another wireguard-install process is already running. Remove $lockfile if you are sure no installer is running."
+	fi
+
+	# Record our PID after acquiring the lock so the next run can identify us
+	printf '%s\n' "$$" > "$lockfile"
 }
 
 is_valid_ipv4() {
