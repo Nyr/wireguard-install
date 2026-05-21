@@ -76,6 +76,39 @@ detect_or_generate_ula_prefix() {
 	gen_random_ula_prefix
 }
 
+# HTTPS-only download with TLS 1.2 minimum, retries, and bounded timeout
+secure_download() {
+	local url="$1"
+	if command -v curl >/dev/null 2>&1; then
+		curl --proto '=https' --tlsv1.2 --retry 3 --retry-delay 2 \
+			--connect-timeout 10 --max-time 60 -fsSL "$url"
+	elif command -v wget >/dev/null 2>&1; then
+		wget --secure-protocol=TLSv1_2 --tries=3 --waitretry=2 \
+			--timeout=60 -qO- "$url"
+	else
+		return 1
+	fi
+}
+
+# Try several public-IP services in order; return the first valid IPv4
+detect_public_ipv4() {
+	local services=(
+		"https://api.ipify.org"
+		"https://ifconfig.me/ip"
+		"https://ipv4.icanhazip.com"
+		"http://ip1.dynupdate.no-ip.com/"
+	)
+	local svc resp
+	for svc in "${services[@]}"; do
+		resp=$(secure_download "$svc" 2>/dev/null | head -1 | tr -d '[:space:]') || true
+		if is_valid_ipv4 "$resp"; then
+			echo "$resp"
+			return 0
+		fi
+	done
+	return 1
+}
+
 # Discard stdin. Needed when running from a one-liner which includes a newline
 read -N 999999 -t 0.001 || true
 
@@ -317,7 +350,8 @@ if [[ ! -e /etc/wireguard/wg0.conf ]]; then
 		echo
 		echo "This server is behind NAT. What is the public IPv4 address or hostname?"
 		# Get public IP and sanitize with grep
-		get_public_ip=$(grep -m 1 -oE '^[0-9]{1,3}(\.[0-9]{1,3}){3}$' <<< "$(wget -T 10 -t 1 -4qO- "http://ip1.dynupdate.no-ip.com/" || curl -m 10 -4Ls "http://ip1.dynupdate.no-ip.com/")")
+		# Probe several IP-detection services for resilience
+		get_public_ip=$(detect_public_ipv4 || true)
 		read -rp "Public IPv4 address / hostname [$get_public_ip]: " public_ip
 		# If the checkip service is unavailable and user didn't provide input, ask again
 		until [[ -n "$get_public_ip" || -n "$public_ip" ]]; do
@@ -437,7 +471,14 @@ if [[ ! -e /etc/wireguard/wg0.conf ]]; then
 		fi
 		# Grab the BoringTun binary using wget or curl and extract into the right place.
 		# Don't use this service elsewhere without permission! Contact me before you do!
-		{ wget -qO- https://wg.nyr.be/1/latest/download 2>/dev/null || curl -sL https://wg.nyr.be/1/latest/download ; } | tar xz -C /usr/local/sbin/ --wildcards 'boringtun-*/boringtun' --strip-components 1
+		# Grab the BoringTun binary over hardened HTTPS and extract into the right place.
+		# Don't use this service elsewhere without permission! Contact upstream maintainer first.
+		# NOTE: upstream does not currently publish signed releases or detached checksums,
+		# so we mitigate MITM risk by pinning TLS 1.2+ and using retries with bounded timeouts.
+		if ! secure_download "https://wg.nyr.be/1/latest/download" \
+			| tar xz -C /usr/local/sbin/ --wildcards 'boringtun-*/boringtun' --strip-components 1; then
+			die "Failed to download BoringTun binary."
+		fi
 		# Configure wg-quick to use BoringTun
 		mkdir -p /etc/systemd/system/wg-quick@wg0.service.d/ || die "Failed to create wg-quick override dir"
 		echo "[Service]
@@ -535,27 +576,40 @@ WantedBy=multi-user.target" >> /etc/systemd/system/wg-iptables.service
 		# Deploy upgrade script
 		cat << 'EOF' > /usr/local/sbin/boringtun-upgrade
 #!/bin/bash
-latest=$(wget -qO- https://wg.nyr.be/1/latest 2>/dev/null || curl -sL https://wg.nyr.be/1/latest 2>/dev/null)
+set -uo pipefail
+
+fetch() {
+	local url="$1"
+	if command -v curl >/dev/null 2>&1; then
+		curl --proto '=https' --tlsv1.2 --retry 3 --retry-delay 2 \
+			--connect-timeout 10 --max-time 60 -fsSL "$url"
+	else
+		wget --secure-protocol=TLSv1_2 --tries=3 --waitretry=2 \
+			--timeout=60 -qO- "$url"
+	fi
+}
+
+latest=$(fetch "https://wg.nyr.be/1/latest" 2>/dev/null || true)
 # If server did not provide an appropriate response, exit
 if ! head -1 <<< "$latest" | grep -qiE "^boringtun.+[0-9]+\.[0-9]+.*$"; then
-	echo "Update server unavailable"
+	echo "Update server unavailable" >&2
 	exit 1
 fi
 current=$(/usr/local/sbin/boringtun -V)
 if [[ "$current" != "$latest" ]]; then
-	download="https://wg.nyr.be/1/latest/download"
 	xdir=$(mktemp -d)
-	# If download and extraction are successful, upgrade the boringtun binary
-	if { wget -qO- "$download" 2>/dev/null || curl -sL "$download" ; } | tar xz -C "$xdir" --wildcards "boringtun-*/boringtun" --strip-components 1; then
+	trap 'rm -rf "$xdir"' EXIT
+	if fetch "https://wg.nyr.be/1/latest/download" \
+		| tar xz -C "$xdir" --wildcards "boringtun-*/boringtun" --strip-components 1; then
 		systemctl stop wg-quick@wg0.service
 		rm -f /usr/local/sbin/boringtun
 		mv "$xdir"/boringtun /usr/local/sbin/boringtun
 		systemctl start wg-quick@wg0.service
 		echo "Successfully updated to $(/usr/local/sbin/boringtun -V)"
 	else
-		echo "boringtun update failed"
+		echo "boringtun update failed" >&2
+		exit 1
 	fi
-	rm -rf "$xdir"
 else
 	echo "$current is up to date"
 fi
