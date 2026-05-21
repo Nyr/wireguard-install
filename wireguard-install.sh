@@ -43,6 +43,16 @@ acquire_lock() {
 	fi
 }
 
+# Strict IPv4 octet validation (each octet must be 0-255)
+is_valid_ipv4() {
+	local ip="$1" oct
+	[[ "$ip" =~ ^([0-9]{1,3})\.([0-9]{1,3})\.([0-9]{1,3})\.([0-9]{1,3})$ ]] || return 1
+	for oct in "${BASH_REMATCH[@]:1:4}"; do
+		(( oct <= 255 )) || return 1
+	done
+	return 0
+}
+
 # Discard stdin. Needed when running from a one-liner which includes a newline
 read -N 999999 -t 0.001 || true
 
@@ -152,7 +162,17 @@ new_client_dns () {
 				resolv_conf="/run/systemd/resolve/resolv.conf"
 			fi
 			# Extract nameservers and provide them in the required format
-			dns=$(grep -v '^#\|^;' "$resolv_conf" | grep '^nameserver' | grep -v '127.0.0.53' | grep -oE '[0-9]{1,3}(\.[0-9]{1,3}){3}' | xargs | sed -e 's/ /, /g')
+			local resolved="" ns
+			while read -r ns; do
+				if is_valid_ipv4 "$ns"; then
+					if [[ -z "$resolved" ]]; then
+						resolved="$ns"
+					else
+						resolved="$resolved, $ns"
+					fi
+				fi
+			done < <(grep -v '^#\|^;' "$resolv_conf" | awk '$1=="nameserver" && $2 != "127.0.0.53" {print $2}')
+			dns="$resolved"
 		;;
 		2)
 			dns="8.8.8.8, 8.8.4.4"
@@ -173,6 +193,7 @@ new_client_dns () {
 			dns="94.140.14.14, 94.140.15.15"
 		;;
 		8)
+			local custom_dns=""
 			echo
 			until [[ -n "$custom_dns" ]]; do
 				echo "Enter DNS servers (one or more IPv4 addresses, separated by commas or spaces):"
@@ -181,7 +202,7 @@ new_client_dns () {
 				dns_input=$(echo "$dns_input" | tr ',' ' ')
 				# Validate and build custom DNS IP list
 				for dns_ip in $dns_input; do
-					if [[ "$dns_ip" =~ ^[0-9]{1,3}(\.[0-9]{1,3}){3}$ ]]; then
+					if is_valid_ipv4 "$dns_ip"; then
 						if [[ -z "$custom_dns" ]]; then
 							custom_dns="$dns_ip"
 						else
