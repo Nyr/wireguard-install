@@ -1,0 +1,8 @@
+# Claude Code project settings (local overrides)
+.claude/
+
+# macOS
+.DS_Store
+
+# WireGuard backup snapshots created by the installer
+/etc/wireguard/wg0.conf.bak.*
