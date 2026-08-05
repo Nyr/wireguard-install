@@ -22,15 +22,15 @@ if grep -qs "ubuntu" /etc/os-release; then
 elif [[ -e /etc/debian_version ]]; then
 	os="debian"
 	os_version=$(grep -oE '[0-9]+' /etc/debian_version | head -1)
-elif [[ -e /etc/almalinux-release || -e /etc/rocky-release || -e /etc/centos-release ]]; then
+elif [[ -e /etc/almalinux-release || -e /etc/rocky-release || -e /etc/centos-release || -e /etc/oracle-release ]]; then
 	os="centos"
-	os_version=$(grep -shoE '[0-9]+' /etc/almalinux-release /etc/rocky-release /etc/centos-release | head -1)
+	os_version=$(grep -shoE '[0-9]+' /etc/almalinux-release /etc/rocky-release /etc/centos-release /etc/oracle-release | head -1)
 elif [[ -e /etc/fedora-release ]]; then
 	os="fedora"
 	os_version=$(grep -oE '[0-9]+' /etc/fedora-release | head -1)
 else
 	echo "This installer seems to be running on an unsupported distribution.
-Supported distros are Ubuntu, Debian, AlmaLinux, Rocky Linux, CentOS and Fedora."
+Supported distros are Ubuntu, Debian, AlmaLinux, Rocky Linux, CentOS, Oracle Linux and Fedora."
 	exit
 fi
 
@@ -53,7 +53,7 @@ This version of Debian is too old and unsupported."
 fi
 
 if [[ "$os" == "centos" && "$os_version" -lt 9 ]]; then
-	os_name=$(sed 's/ release.*//' /etc/almalinux-release /etc/rocky-release /etc/centos-release 2>/dev/null | head -1)
+	os_name=$(sed 's/ release.*//' /etc/almalinux-release /etc/rocky-release /etc/centos-release /etc/oracle-release 2>/dev/null | head -1)
 	echo "$os_name 9 or higher is required to use this installer.
 This version of $os_name is too old and unsupported."
 	exit
@@ -330,8 +330,12 @@ if [[ ! -e /etc/wireguard/wg0.conf ]]; then
 			apt-get update
 			apt-get install -y wireguard qrencode $firewall
 		elif [[ "$os" == "centos" ]]; then
-			# CentOS
-			dnf install -y epel-release
+			# RHEL-based distributions
+			if [[ -e /etc/oracle-release ]]; then
+				dnf install -y "oracle-epel-release-el$os_version"
+			else
+				dnf install -y epel-release
+			fi
 			dnf install -y wireguard-tools qrencode $firewall
 		elif [[ "$os" == "fedora" ]]; then
 			# Fedora
@@ -352,8 +356,12 @@ if [[ ! -e /etc/wireguard/wg0.conf ]]; then
 			apt-get install -y qrencode ca-certificates $cron $firewall
 			apt-get install -y wireguard-tools --no-install-recommends
 		elif [[ "$os" == "centos" ]]; then
-			# CentOS
-			dnf install -y epel-release
+			# RHEL-based distributions
+			if [[ -e /etc/oracle-release ]]; then
+				dnf install -y "oracle-epel-release-el$os_version"
+			else
+				dnf install -y epel-release
+			fi
 			dnf install -y wireguard-tools qrencode ca-certificates tar $cron $firewall
 		elif [[ "$os" == "fedora" ]]; then
 			# Fedora
